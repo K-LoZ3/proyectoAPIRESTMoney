@@ -136,7 +136,38 @@ func getIngresos(w http.ResponseWriter, r *http.Request) {
   }
 }
 
+//getTotalIngresos devuelve el total de ingresos
+//consulta http://100.69.187.16:8080/totalIngresos?desde=2024-12-04T00:00:00z&hasta=2024-12-20T00:00:00z
+func getTotalIngresos(w http.ResponseWriter, r *http.Request) {
+  
+  desde, err := time.Parse("2006-01-02T00:00:00z", r.URL.Query().Get("desde"))
+  if err != nil {
+    errorStr := fmt.Sprintf("Error al ingresae la fecha, %v", err)
+    http.Error(w, errorStr, http.StatusBadRequest)
+  }
+  
+  hasta, err := time.Parse("2006-01-02T00:00:00z", r.URL.Query().Get("hasta"))
+  if err != nil {
+    errorStr := fmt.Sprintf("Error al ingresae la fecha, %v", err)
+    http.Error(w, errorStr, http.StatusBadRequest)
+  }
+  
+  var total int
+
+  err = db.QueryRow("SELECT COALESCE(SUM(monto), 0) FROM movimientos WHERE tipo = ? AND fecha BETWEEN ? AND ?", "ingreso", desde, hasta).Scan(&total)
+  if err != nil {
+    http.Error(w, "Error al consultar y sumar los ingresos.", http.StatusInternalServerError)
+    return
+  }
+  
+  // Devolvemos el total en JSON
+  response := map[string]int{"total": total}
+  w.Header().Set("Content-Type", "application/json")
+  json.NewEncoder(w).Encode(response)
+}
+
 //putEgreso agrega un moviviento en la tabla de tipo egreso, se resive con un Json.
+//Json ejemplo{"monto": 22,"fecha": "2024-12-05T00:00:00Z"}
 func postEgreso(w http.ResponseWriter, r *http.Request) {
   //Creo la variable para almacenar los datos que envia el cliente
   var m Movimiento
@@ -172,7 +203,8 @@ func postEgreso(w http.ResponseWriter, r *http.Request) {
   //comprobamos el error al pasarlos
   err = json.NewEncoder(w).Encode(m)
   if err != nil {
-    http.Error(w, "Error al escribir el json con los datos que se ingresaron.", http.StatusInternalServerError)
+    errorStr := fmt.Sprintf("Error al escribir el json con los datos que se ingresaron. %v", err)
+    http.Error(w, errorStr, http.StatusInternalServerError)
   }
 }
 
@@ -183,7 +215,8 @@ func postIngreso(w http.ResponseWriter, r *http.Request) {
   //comprobamos el error
   err := json.NewDecoder(r.Body).Decode(&m)
   if err != nil {
-    http.Error(w, "Error al leer los datos del json.", http.StatusBadRequest)
+    errorStr := fmt.Sprintf("Error al leer los datos del json. %v", err)
+    http.Error(w, errorStr, http.StatusBadRequest)
     return
   }
   
@@ -225,8 +258,8 @@ func main() {
   r.HandleFunc("/ingreso", getIngresos).Methods("GET")
   r.HandleFunc("/ingreso", postIngreso).Methods("POST")
   r.HandleFunc("/egreso", postEgreso).Methods("POST")
-  r.HandleFunc("/egreso/total", holaMundo).Methods("GET")
-  r.HandleFunc("/ingreso/total", holaMundo).Methods("GET")
+  r.HandleFunc("/totalEgresos", holaMundo).Methods("GET")
+  r.HandleFunc("/totalIngresos", getTotalIngresos).Methods("GET")
   r.HandleFunc("/ingreso/{id}", holaMundo).Methods("GET")
   r.HandleFunc("/egreso/{id}", holaMundo).Methods("GET")
   r.HandleFunc("/ingreso/{id}", holaMundo).Methods("PUT")
