@@ -136,31 +136,35 @@ func getIngresos(w http.ResponseWriter, r *http.Request) {
   }
 }
 
-//getTotalIngresos devuelve el total de ingresos
-//consulta http://100.69.187.16:8080/totalIngresos?desde=2024-12-04T00:00:00z&hasta=2024-12-20T00:00:00z
+//getTotalIngresos devuelve el total de ingresos dependiendo de las fechas
+//que se le pasen, sumara todo entre ellas y devolvera solo la suma
+//consulta http://100.69.187.16:8080/totalIngresos?desde=2024-12-04T00:00:00Z&hasta=2024-12-20T00:00:00Z
 func getTotalIngresos(w http.ResponseWriter, r *http.Request) {
   
-  desde, err := time.Parse("2006-01-02T00:00:00z", r.URL.Query().Get("desde"))
+  //Convertimos los strings a formato fecha y validamos los errores
+  desde, err := time.Parse("2006-01-02T00:00:00Z", r.URL.Query().Get("desde"))
+  if err != nil {
+    errorStr := fmt.Sprintf("Error al ingresae la fecha, %v", err)
+    http.Error(w, errorStr, http.StatusBadRequest)
+  }
+  hasta, err := time.Parse("2006-01-02T00:00:00Z", r.URL.Query().Get("hasta"))
   if err != nil {
     errorStr := fmt.Sprintf("Error al ingresae la fecha, %v", err)
     http.Error(w, errorStr, http.StatusBadRequest)
   }
   
-  hasta, err := time.Parse("2006-01-02T00:00:00z", r.URL.Query().Get("hasta"))
-  if err != nil {
-    errorStr := fmt.Sprintf("Error al ingresae la fecha, %v", err)
-    http.Error(w, errorStr, http.StatusBadRequest)
-  }
-  
+  //Creo la variabke que escaneara el valor de la suma de la consulta
   var total int
-
+  //Realizamos la consulta en la tabla, COALESCE(,) asegura que no
+  //retornara nil si no hay valores que sumar, validamos el error.
   err = db.QueryRow("SELECT COALESCE(SUM(monto), 0) FROM movimientos WHERE tipo = ? AND fecha BETWEEN ? AND ?", "ingreso", desde, hasta).Scan(&total)
   if err != nil {
     http.Error(w, "Error al consultar y sumar los ingresos.", http.StatusInternalServerError)
     return
   }
   
-  // Devolvemos el total en JSON
+  // Devolvemos el total en JSON, lo pasamos a map ya que la funcion Encode
+  //necesita un tipo de dato que sea compatiple para codificar.
   response := map[string]int{"total": total}
   w.Header().Set("Content-Type", "application/json")
   json.NewEncoder(w).Encode(response)
