@@ -136,6 +136,42 @@ func getIngresos(w http.ResponseWriter, r *http.Request) {
   }
 }
 
+//getTotalEgresos devuelve el total de egresos dependiendo de las fechas
+//que se le pasen, sumara todo entre ellas y devolvera solo la suma
+//consulta http://100.69.187.16:8080/totalEgresos?desde=2024-12-20T00:00:00Z&hasta=2024-12-31T00:00:00Z
+func getTotalEgresos(w http.ResponseWriter, r *http.Request) {
+  //Recibe las fechas y en el formato para time.Time y validamos el error.
+  desde, err := time.Parse("2006-01-02T00:00:00Z", r.URL.Query().Get("desde"))
+  if err != nil {
+    errorStr := fmt.Sprintf("Error en la fecha ingresada 'desde', %v", err)
+    http.Error(w, errorStr, http.StatusBadRequest)
+    return
+  }
+  hasta, err := time.Parse("2006-01-02T00:00:00Z", r.URL.Query().Get("hasta"))
+  if err != nil {
+    errorStr := fmt.Sprintf("Error en la fecha ingresada 'hasta', %v", err)
+    http.Error(w, errorStr, http.StatusBadRequest)
+    return
+  }
+  //variable para escanear el total
+  var total int
+  //Consultamos de monto los valores con el tipo "egreso" y los sumamos.
+  //asegurqndo con COALESCE que no devuelva nil siempre que no tenga valores
+  //entre las fechas dadas. Validamos el error y scaneamos el total.
+  err = db.QueryRow("SELECT COALESCE(SUM(monto), 0) FROM movimientos WHERE tipo = ? AND fecha BETWEEN ? AND ?", "egreso", desde, hasta).Scan(&total)
+  if err != nil {
+    errorStr := fmt.Sprintf("Error al consultar y sumar los egresos de la base de datos, %v", err)
+    http.Error(w, errorStr, http.StatusInternalServerError)
+    return
+  }
+  
+  // Devolvemos el total en JSON, lo pasamos a map ya que la funcion Encode
+  //necesita un tipo de dato que sea compatiple para codificar.
+  jsonTotalEgresos := map[string]int{"total": total}
+  w.Header().Set("Content-Type", "application/json")
+  json.NewEncoder(w).Encode(jsonTotalEgresos)
+}
+
 //getTotalIngresos devuelve el total de ingresos dependiendo de las fechas
 //que se le pasen, sumara todo entre ellas y devolvera solo la suma
 //consulta http://100.69.187.16:8080/totalIngresos?desde=2024-12-04T00:00:00Z&hasta=2024-12-20T00:00:00Z
@@ -146,11 +182,13 @@ func getTotalIngresos(w http.ResponseWriter, r *http.Request) {
   if err != nil {
     errorStr := fmt.Sprintf("Error al ingresae la fecha, %v", err)
     http.Error(w, errorStr, http.StatusBadRequest)
+    return
   }
   hasta, err := time.Parse("2006-01-02T00:00:00Z", r.URL.Query().Get("hasta"))
   if err != nil {
     errorStr := fmt.Sprintf("Error al ingresae la fecha, %v", err)
     http.Error(w, errorStr, http.StatusBadRequest)
+    return
   }
   
   //Creo la variabke que escaneara el valor de la suma de la consulta
@@ -165,9 +203,9 @@ func getTotalIngresos(w http.ResponseWriter, r *http.Request) {
   
   // Devolvemos el total en JSON, lo pasamos a map ya que la funcion Encode
   //necesita un tipo de dato que sea compatiple para codificar.
-  response := map[string]int{"total": total}
+  jsonTotalIngresos := map[string]int{"total": total}
   w.Header().Set("Content-Type", "application/json")
-  json.NewEncoder(w).Encode(response)
+  json.NewEncoder(w).Encode(jsonTotalIngresos)
 }
 
 //putEgreso agrega un moviviento en la tabla de tipo egreso, se resive con un Json.
@@ -262,7 +300,7 @@ func main() {
   r.HandleFunc("/ingreso", getIngresos).Methods("GET")
   r.HandleFunc("/ingreso", postIngreso).Methods("POST")
   r.HandleFunc("/egreso", postEgreso).Methods("POST")
-  r.HandleFunc("/totalEgresos", holaMundo).Methods("GET")
+  r.HandleFunc("/totalEgresos", getTotalEgresos).Methods("GET")
   r.HandleFunc("/totalIngresos", getTotalIngresos).Methods("GET")
   r.HandleFunc("/ingreso/{id}", holaMundo).Methods("GET")
   r.HandleFunc("/egreso/{id}", holaMundo).Methods("GET")
