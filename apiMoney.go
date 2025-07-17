@@ -65,6 +65,8 @@ func comprobarMovimiento(m Movimiento) error{
   return nil
 }
 
+//GETS
+
 //getEgresos consulta los egresos en la tabla, que sean egresos y luego
 //los envia en formati json al navegador.
 func getEgresos(w http.ResponseWriter, r *http.Request) {
@@ -208,6 +210,30 @@ func getTotalIngresos(w http.ResponseWriter, r *http.Request) {
   json.NewEncoder(w).Encode(jsonTotalIngresos)
 }
 
+//getById retorna un moviviento dependiendo solo del id que se pasa como
+//variqble en la URL. ejm: http://100.69.187.16:8080/moviviento/10
+func getById(w http.ResponseWriter, r *http.Request) {
+  //Sacamos la variable.
+  //TODO: VALIDAR QUE SEA UN INTERO.
+  id := mux.Vars(r)["id"]
+  
+  //Estructura para obtener los datos de la base de datos.
+  var m Movimiento
+  
+  //consultamos por id y validamos el error.
+  err := db.QueryRow("SELECT id, tipo, monto, descripcion, grupo, fecha, creado FROM movimientos WHERE id = ?", id).Scan(&m.Id, &m.Tipo, &m.Monto, &m.Descripcion, &m.Grupo, &m.Fecha, &m.Creado)
+  //TOEO: CAMBIAR EL LOG.FATAL.
+  if err != nil {
+    log.Fatal(err)
+  }
+  
+  //estavlecemos cabeceras y respondemos con un json.
+  w.Header().Set("Content-Type", "application/json")
+  json.NewEncoder(w).Encode(m)
+}
+
+//POSTS
+
 //putEgreso agrega un moviviento en la tabla de tipo egreso, se resive con un Json.
 //Json ejemplo{"monto": 22,"fecha": "2024-12-05T00:00:00Z"}
 func postEgreso(w http.ResponseWriter, r *http.Request) {
@@ -302,8 +328,7 @@ func main() {
   r.HandleFunc("/egreso", postEgreso).Methods("POST")
   r.HandleFunc("/totalEgresos", getTotalEgresos).Methods("GET")
   r.HandleFunc("/totalIngresos", getTotalIngresos).Methods("GET")
-  r.HandleFunc("/ingreso/{id}", holaMundo).Methods("GET")
-  r.HandleFunc("/egreso/{id}", holaMundo).Methods("GET")
+  r.HandleFunc("/movimiento/{id}", getById).Methods("GET")
   r.HandleFunc("/ingreso/{id}", holaMundo).Methods("PUT")
   r.HandleFunc("/egreso/{id}", holaMundo).Methods("PUT")
   r.HandleFunc("/egreso/{id}", holaMundo).Methods("DELETE")
