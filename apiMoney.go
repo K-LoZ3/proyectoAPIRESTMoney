@@ -7,6 +7,7 @@ import (
   "database/sql"
   "encoding/json"
   "log"
+  "strconv"
   
   _ "modernc.org/sqlite"
   "github.com/gorilla/mux"
@@ -211,30 +212,33 @@ func getTotalIngresos(w http.ResponseWriter, r *http.Request) {
 }
 
 //getById retorna un moviviento dependiendo solo del id que se pasa como
-//variqble en la URL. ejm: http://100.69.187.16:8080/moviviento/10
+//variqble en la URL. ejm: http://100.69.187.16:8080/movimiento/10
 func getById(w http.ResponseWriter, r *http.Request) {
   //Sacamos la variable.
-  //TODO: VALIDAR QUE SEA UN INTERO.
-  id := mux.Vars(r)["id"]
+  //validamos que sea de tipo int
+  id, err := strconv.Atoi(mux.Vars(r)["id"])
+  if err != nil {
+    http.Error(w, "Error en id, se esperaba un numero de tipo int.", http.StatusBadRequest)
+  }
   
-  //Estructura para obtener los datos de la base de datos.
+  //Estructura para obtener los datos de la base de dato.
   var m Movimiento
   
   //consultamos por id y validamos el error.
-  err := db.QueryRow("SELECT id, tipo, monto, descripcion, grupo, fecha, creado FROM movimientos WHERE id = ?", id).Scan(&m.Id, &m.Tipo, &m.Monto, &m.Descripcion, &m.Grupo, &m.Fecha, &m.Creado)
-  //TOEO: CAMBIAR EL LOG.FATAL.
+  err = db.QueryRow("SELECT id, tipo, monto, descripcion, grupo, fecha, creado FROM movimientos WHERE id = ?", id).Scan(&m.Id, &m.Tipo, &m.Monto, &m.Descripcion, &m.Grupo, &m.Fecha, &m.Creado)
   if err != nil {
-    log.Fatal(err)
+    errorStr := fmt.Sprintf("Error al consultar en la base de datos el id ingresado. %v", err)
+    http.Error(w, errorStr, http.StatusInternalServerError)
   }
   
-  //estavlecemos cabeceras y respondemos con un json.
+  //establecemos cabeceras y respondemos con un json.
   w.Header().Set("Content-Type", "application/json")
   json.NewEncoder(w).Encode(m)
 }
 
 //POSTS
 
-//putEgreso agrega un moviviento en la tabla de tipo egreso, se resive con un Json.
+//postEgreso agrega un moviviento en la tabla de tipo egreso, se resive con un Json.
 //Json ejemplo{"monto": 22,"fecha": "2024-12-05T00:00:00Z"}
 func postEgreso(w http.ResponseWriter, r *http.Request) {
   //Creo la variable para almacenar los datos que envia el cliente
@@ -317,6 +321,46 @@ func postIngreso(w http.ResponseWriter, r *http.Request) {
   }
 }
 
+//PUTS
+
+//putById actualiza un registro en la tabla segun el id que se pase como
+//variable por URL con los datos tipo json a travez del body. De momento se
+//asume que el cliente envia los datos completos.
+//ejm http://100.69.187.16:8080/movimiento/9
+// {"monto": 333, "grupo": "nuevo"}
+//ToDo: LOS DATOS OMITIDOS DEJARLOS CON EL MISMO VALOR.
+func putById(w http.ResponseWriter, r *http.Request) {
+  //Extraemos la el id de la URL y aseguramos que sea un int.
+  id, err := strconv.Atoi(mux.Vars(r)["id"])
+  if err != nil {
+    http.Error(w, "Error en id, se esperaba un numero de tipo int.", http.StatusBadRequest)
+    return
+  }
+  
+  //Variable para extraer los datos a actualizar.
+  //De momenro los actualiza asumiendo que pasa todos los datos.
+  var m Movimiento
+  //Pasamos los datos a la variable y comprobamos el error.
+  err = json.NewDecoder(r.Body).Decode(&m)
+  if err != nil {
+    errorStr := fmt.Sprintf("Error al leer los datos del json. %v", err)
+    http.Error(w, errorStr, http.StatusBadRequest)
+    return
+  }
+  
+  //Actualizamos los datos en la tabla por id y validamos el error.
+  _, err = db.Exec("UPDATE movimientos SET monto = ?, descripcion = ?, grupo = ?, fecha = ? WHERE id = ?", m.Monto, m.Descripcion, m.Grupo, m.Fecha, id)
+  if err != nil {
+    errorStr := fmt.Sprintf("Error al actualizar el registro en la base de datos con el id ingresado. %v", err)
+    http.Error(w, errorStr, http.StatusInternalServerError)
+    return
+  }
+  
+  //establecemos cabeceras y respondemos con un json.
+  w.Header().Set("Content-Type", "application/json")
+  json.NewEncoder(w).Encode(m)
+}
+
 func main() {
   initDB()
   defer db.Close()
@@ -329,10 +373,8 @@ func main() {
   r.HandleFunc("/totalEgresos", getTotalEgresos).Methods("GET")
   r.HandleFunc("/totalIngresos", getTotalIngresos).Methods("GET")
   r.HandleFunc("/movimiento/{id}", getById).Methods("GET")
-  r.HandleFunc("/ingreso/{id}", holaMundo).Methods("PUT")
-  r.HandleFunc("/egreso/{id}", holaMundo).Methods("PUT")
-  r.HandleFunc("/egreso/{id}", holaMundo).Methods("DELETE")
-  r.HandleFunc("/ingreso/{id}", holaMundo).Methods("DELETE")
+  r.HandleFunc("/movimiento/{id}", putById).Methods("PUT")
+  r.HandleFunc("/movimiento/{id}", holaMundo).Methods("DELETE")
   r.HandleFunc("/export/{type}", holaMundo).Methods("GET")
   
   
