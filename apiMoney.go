@@ -219,6 +219,7 @@ func getById(w http.ResponseWriter, r *http.Request) {
   id, err := strconv.Atoi(mux.Vars(r)["id"])
   if err != nil {
     http.Error(w, "Error en id, se esperaba un numero de tipo int.", http.StatusBadRequest)
+    return
   }
   
   //Estructura para obtener los datos de la base de dato.
@@ -229,6 +230,7 @@ func getById(w http.ResponseWriter, r *http.Request) {
   if err != nil {
     errorStr := fmt.Sprintf("Error al consultar en la base de datos el id ingresado. %v", err)
     http.Error(w, errorStr, http.StatusInternalServerError)
+    return
   }
   
   //establecemos cabeceras y respondemos con un json.
@@ -361,6 +363,45 @@ func putById(w http.ResponseWriter, r *http.Request) {
   json.NewEncoder(w).Encode(m)
 }
 
+//DELETES
+
+//deleteById elimina un registro segun el id ingresado.
+func deleteById(w http.ResponseWriter, r *http.Request) {
+  //Extraemos la el id de la URL y aseguramos que sea un int.
+  id, err := strconv.Atoi(mux.Vars(r)["id"])
+  if err != nil {
+    http.Error(w, "Error en id, se esperaba un numero de tipo int.", http.StatusBadRequest)
+    return
+  }
+  
+  //preparamos la instruccion para sqlite.
+  stmt, err := db.Prepare("DELETE FROM movimientos WHERE id = ?")
+  if err != nil {
+    http.Error(w, "Error preparando SQL", http.StatusInternalServerError)
+    return
+  }
+  //cerramos la base de datos.
+  defer stmt.Close()
+  
+  //Ejecutamos la instruccion para eliminar el regustri.
+  res, err := stmt.Exec(id)
+  if err != nil {
+    http.Error(w, "Error ejecutando DELETE", http.StatusInternalServerError)
+    return
+  }
+  
+  //Validamos que si elimine el regustro
+  filas, err := res.RowsAffected()
+  if err != nil || filas == 0 {
+    http.Error(w, "No se eliminó ningún registro", http.StatusNotFound)
+    return
+  }
+  
+  //respondemos al usuario.
+  w.WriteHeader(http.StatusOK)
+  fmt.Fprintf(w, "Movimiento con ID %s eliminado correctamente", id)
+}
+
 func main() {
   initDB()
   defer db.Close()
@@ -374,7 +415,7 @@ func main() {
   r.HandleFunc("/totalIngresos", getTotalIngresos).Methods("GET")
   r.HandleFunc("/movimiento/{id}", getById).Methods("GET")
   r.HandleFunc("/movimiento/{id}", putById).Methods("PUT")
-  r.HandleFunc("/movimiento/{id}", holaMundo).Methods("DELETE")
+  r.HandleFunc("/movimiento/{id}", deleteById).Methods("DELETE")
   r.HandleFunc("/export/{type}", holaMundo).Methods("GET")
   
   
