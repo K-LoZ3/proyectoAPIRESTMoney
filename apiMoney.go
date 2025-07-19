@@ -15,11 +15,6 @@ import (
   "github.com/gorilla/mux"
 )
 
-//Eliminar al finalizar con los handlers
-func holaMundo(w http.ResponseWriter, r *http.Request) {
-  fmt.Fprintf(w, "Hola Mundo!")
-}
-
 //Estructura movimiento: para la base de datos manejaremos los movimientos positivos y negativos
 //con la misma estructura. El campo tipo sera el que ayude a identificar si el valor es un egreso
 //o un ingreso y le dara la naturaleza al movimiento. En la bd se usara una tabla.
@@ -34,51 +29,6 @@ type Movimiento struct {
 }
 
 var db *sql.DB
-
-func initDB() {
-  var err error
-  db, err = sql.Open("sqlite", "movimientos.db")
-  if err != nil {
-    log.Fatal(err)
-  }
-  
-  crearTabla := `
-  CREATE TABLE IF NOT EXISTS movimientos(
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  tipo TEXT,
-  monto INTEGER,
-  descripcion TEXT,
-  grupo TEXT,
-  fecha DATETIME,
-  creado DATETIME
-  );`
-  
-  _, err = db.Exec(crearTabla)
-  if err != nil {
-    log.Fatal("Error creando la tabla", err)
-  }
-}
-
-//comprobarMovimiento recibe la estructura para validar si se ingrresaron los datos
-//obligatorios. Devuelve un error si falta  datos.
-func comprobarMovimiento(m Movimiento) error{
-  if m.Monto == 0 || m.Fecha.IsZero() {
-    return fmt.Errorf("Error al ingresar los datos, datos importantes son omitidos")
-  }
-  return nil
-}
-
-func movimientoASlice(m Movimiento) []string {
-	return []string{
-		strconv.Itoa(m.Id),
-		m.Tipo,
-		strconv.Itoa(m.Monto),
-		m.Descripcion,
-		m.Grupo,
-		m.Fecha.Format("2006-01-02"),
-		m.Creado.Format("2006-01-02"),
-	}
-}
 
 //GETS
 
@@ -96,18 +46,16 @@ func getEgresos(w http.ResponseWriter, r *http.Request) {
   
   //Creamos el slice para agrupar todos los egresos
   var movimientos []Movimiento
-  //recorremos cada fila co  un for.
-  for rows.Next() {
-    var m Movimiento
-    //Escaneamos los datos por cada fila y los pasamos a la estructura
-    //validamos el error al mismo tiempo
-    if err = rows.Scan(&m.Id, &m.Tipo, &m.Monto, &m.Descripcion, &m.Grupo, &m.Fecha, &m.Creado) ; err != nil {
-      http.Error(w, "Error al pasar los datos de la tabla a la estructura.", http.StatusBadRequest)
-      return
-    }
-    //agregamls los datos a a la estructura
-    movimientos = append(movimientos, m)
+  
+  //Pasamos los registros a un slite de Movimiento que almacenara todo para
+  //escribirlo en el archivoo
+  movimientos, err = dbRowsAMovimientos(rows)
+  if err != nil {
+    errorStr := fmt.Sprintf("Error al escaner los movimientos %v", err)
+    http.Error(w, errorStr, http.StatusInternalServerError)
+    return
   }
+  
   //Establecemos el header de tipo json
   w.Header().Set("Contenct-Type", "application/json")
   w.WriteHeader(http.StatusOK)
@@ -130,16 +78,13 @@ func getIngresos(w http.ResponseWriter, r *http.Request) {
   
   //Creo la variable para almacenar los movimientos
   var movimientos []Movimiento
-  for rows.Next() {
-    var m Movimiento
-    //Escaneamos los datos de la cada fila
-    err = rows.Scan(&m.Id, &m.Tipo, &m.Monto, &m.Descripcion, &m.Grupo, &m.Fecha, &m.Creado)
-    if err != nil {
-      http.Error(w, "Error al scanear los datos de la fila.", http.StatusBadRequest)
-      return
-    }
-    //Agregamos cada fila/structura al slice 
-    movimientos = append(movimientos, m)
+  //Pasamos los registros a un slite de Movimiento que almacenara todo para
+  //escribirlo en el archivoo
+  movimientos, err = dbRowsAMovimientos(rows)
+  if err != nil {
+    errorStr := fmt.Sprintf("Error al escaner los movimientos %v", err)
+    http.Error(w, errorStr, http.StatusInternalServerError)
+    return
   }
   
   //Establecemos el header de tipo json
@@ -286,16 +231,13 @@ func exportFechas(w http.ResponseWriter, r *http.Request) {
   
   var movimientos []Movimiento
   
-  //Recirremos la base de datos para luego agregarla a slite.
-  for rows.Next() {
-    var m Movimiento
-    err := rows.Scan(&m.Id, &m.Tipo, &m.Monto, &m.Descripcion, &m.Grupo, &m.Fecha, &m.Creado)
-    if err != nil {
-      errorStr := fmt.Sprintf("Error al escanear en la escmtructura cada moviviento, %v", err)
-      http.Error(w, errorStr, http.StatusInternalServerError)
-    }
-    
-    movimientos = append(movimientos, m)
+  //Pasamos los registros a un slite de Movimiento que almacenara todo para
+  //escribirlo en el archivoo
+  movimientos, err = dbRowsAMovimientos(rows)
+  if err != nil {
+    errorStr := fmt.Sprintf("Error al escaner los movimientos %v", err)
+    http.Error(w, errorStr, http.StatusInternalServerError)
+    return
   }
   
   // Obtener la fecha actual en formato YYYY-MM-DD
