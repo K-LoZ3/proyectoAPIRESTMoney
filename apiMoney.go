@@ -9,7 +9,6 @@ import (
   "encoding/csv"
   "log"
   "strconv"
-  "os"
   
   _ "modernc.org/sqlite"
   "github.com/gorilla/mux"
@@ -240,18 +239,9 @@ func exportFechas(w http.ResponseWriter, r *http.Request) {
     return
   }
   
-  // Obtener la fecha actual en formato YYYY-MM-DD
-	fechaActual := time.Now().Format("2006-01-02")
 	if tipo == "csv" {
-	  //Creamos un archivo de nombre movimiento_FECHAACTUAL
-  	nombreArchivo := fmt.Sprintf("movimientos_%s.csv", fechaActual)
-  
-  	// Crear el archivo nuevo si ni existe y si no existe lo actualiza.
-  	archivo, err := os.OpenFile(nombreArchivo, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
-    if err != nil {
-      http.Error(w, "Error al crear al erchivo", http.StatusInternalServerError)
-      return
-    }
+	  //creamos el archivo .csv
+    archivo, err := crearArchivo(tipo)
   	defer archivo.Close()
     
     //creamos un writer del archivo para poder escrubirle
@@ -270,15 +260,8 @@ func exportFechas(w http.ResponseWriter, r *http.Request) {
       }
     }
 	} else {
-	  //si el tipo es json creamos el archico .json
-	  nombreArchivo := fmt.Sprintf("movimientos_%s.json", fechaActual)
-  
-  	// Crear el archivo nuevo
-  	archivo, err := os.OpenFile(nombreArchivo, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
-    if err != nil {
-      http.Error(w, "Error al crear al erchivo", http.StatusInternalServerError)
-      return
-    }
+	  //creamos el archivo .json
+	  archivo, err := crearArchivo(tipo)
   	defer archivo.Close()
   	
   	//Creamos un Encoder del archivo para escribir formato json en el.

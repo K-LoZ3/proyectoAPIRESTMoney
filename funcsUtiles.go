@@ -5,6 +5,8 @@ import (
   "database/sql"
   "strconv"
   "log"
+  "os"
+  "time"
   
   _ "modernc.org/sqlite"
 )
@@ -79,4 +81,19 @@ func dbRowsAMovimientos(rows *sql.Rows) (movimientos []Movimiento, err error) {
   }
   
   return 
+}
+
+func crearArchivo(tipo string) (archivo *os.File, err error) {
+  // Obtener la fecha actual en formato YYYY-MM-DD
+	fechaActual := time.Now().Format("2006-01-02")
+	//Creamos un archivo de nombre movimiento_FECHAACTUAL
+  nombreArchivo := fmt.Sprintf("movimientos_%s.%s", fechaActual, tipo)
+  
+  // Crear el archivo nuevo si ni existe y si no existe lo actualiza.
+  archivo, err = os.OpenFile(nombreArchivo, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+  if err != nil {
+    err = fmt.Errorf("Error al crear al erchivo, %v", err)
+    return
+  }
+  return
 }
