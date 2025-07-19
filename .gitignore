@@ -1,3 +1,5 @@
 apiMoney
 
 movimientos.db
+*.csv
+*.json

@@ -6,8 +6,10 @@ import (
   "fmt"
   "database/sql"
   "encoding/json"
+  "encoding/csv"
   "log"
   "strconv"
+  "os"
   
   _ "modernc.org/sqlite"
   "github.com/gorilla/mux"
@@ -66,6 +68,18 @@ func comprobarMovimiento(m Movimiento) error{
   return nil
 }
 
+func movimientoASlice(m Movimiento) []string {
+	return []string{
+		strconv.Itoa(m.Id),
+		m.Tipo,
+		strconv.Itoa(m.Monto),
+		m.Descripcion,
+		m.Grupo,
+		m.Fecha.Format("2006-01-02"),
+		m.Creado.Format("2006-01-02"),
+	}
+}
+
 //GETS
 
 //getEgresos consulta los egresos en la tabla, que sean egresos y luego
@@ -80,7 +94,7 @@ func getEgresos(w http.ResponseWriter, r *http.Request) {
   }
   defer rows.Close() //cerramos la base de datos
   
-  //Creamos el slite para agrupar todos los egresos
+  //Creamos el slice para agrupar todos los egresos
   var movimientos []Movimiento
   //recorremos cada fila co  un for.
   for rows.Next() {
@@ -97,7 +111,7 @@ func getEgresos(w http.ResponseWriter, r *http.Request) {
   //Establecemos el header de tipo json
   w.Header().Set("Contenct-Type", "application/json")
   w.WriteHeader(http.StatusOK)
-  //Pasamos todos los datos del slite a json y los enviamos
+  //Pasamos todos los datos del slice a json y los enviamos
   //al usuario, valodamos el error
   err = json.NewEncoder(w).Encode(movimientos)
   if err != nil {
@@ -124,14 +138,14 @@ func getIngresos(w http.ResponseWriter, r *http.Request) {
       http.Error(w, "Error al scanear los datos de la fila.", http.StatusBadRequest)
       return
     }
-    //Agregamos cada fila/structura al slite 
+    //Agregamos cada fila/structura al slice 
     movimientos = append(movimientos, m)
   }
   
   //Establecemos el header de tipo json
   w.Header().Set("Contenct-Type", "application/json")
   w.WriteHeader(http.StatusOK)
-  //Pasamos todos los datos del slite a json y los enviamos
+  //Pasamos todos los datos del slice a json y los enviamos
   //al usuario, valodamos el error
   err = json.NewEncoder(w).Encode(movimientos)
   if err != nil {
@@ -236,6 +250,138 @@ func getById(w http.ResponseWriter, r *http.Request) {
   //establecemos cabeceras y respondemos con un json.
   w.Header().Set("Content-Type", "application/json")
   json.NewEncoder(w).Encode(m)
+}
+
+func exportMovimientos(w http.ResponseWriter, r *http.Request) {
+  
+  //Sacamos la variable.
+  tipo := mux.Vars(r)["type"]
+  if tipo != "json" && tipo != "csv" {
+    http.Error(w, "Error en tipo del archivo, se esperaba un tipo json o csv", http.StatusBadRequest)
+    return
+  }
+  
+  rows, err := db.Query("SELECT id, tipo, monto, descripcion, grupo, fecha, creado FROM movimientos")
+  if err != nil {
+    http.Error(w, "Error al consultar los regustris en la base de datos.", http.StatusInternalServerError)
+    return
+  }
+  defer rows.Close()
+  
+  var movimientos []Movimiento
+  
+  for rows.Next() {
+    var m Movimiento
+    err := rows.Scan(&m.Id, &m.Tipo, &m.Monto, &m.Descripcion, &m.Grupo, &m.Fecha, &m.Creado)
+    if err != nil {
+      errorStr := fmt.Sprintf("Error al escanear en la escmtructura cada moviviento, %v", err)
+      http.Error(w, errorStr, http.StatusInternalServerError)
+    }
+    
+    movimientos = append(movimientos, m)
+  }
+  
+  if tipo == "json" {
+    archivo, err := os.Create("movimientos.json")
+    if err != nil {
+      http.Error(w, "Error al crear al erchivo", http.StatusInternalServerError)
+      return
+    }
+    defer archivo.Close()
+    
+    encoder := json.NewEncoder(archivo)
+    encoder.SetIndent("", "  ")
+    err = encoder.Encode(movimientos)
+    if err != nil {
+      http.Error(w, "Error al escribir en el archivo", http.StatusInternalServerError)
+    }
+  } else {
+    archivo, err := os.Create("movimientos.csv")
+    if err != nil {
+      http.Error(w, "Error al crear al erchivo", http.StatusInternalServerError)
+      return
+    }
+    
+    defer archivo.Close()
+    
+    writer := csv.NewWriter(archivo)
+    defer writer.Flush()
+    
+    for _, fila := range movimientos {
+      err = writer.Write(movimientoASlice(fila))
+      if err != nil {
+        errorStr := fmt.Sprintf("Error al escribir el el archivo. %v", err)
+        http.Error(w, errorStr, http.StatusInternalServerError)
+        return
+      }
+    }
+  }
+
+  w.Header().Set("Content-Type", "application/json")
+  w.WriteHeader(http.StatusCreated)
+}
+
+func exportCsvFechas(w http.ResponseWriter, r *http.Request) {
+  //Recibe las fechas y en el formato para time.Time y validamos el error.
+  desde, err := time.Parse("2006-01-02T00:00:00Z", r.URL.Query().Get("desde"))
+  if err != nil {
+    errorStr := fmt.Sprintf("Error en la fecha ingresada 'desde', %v", err)
+    http.Error(w, errorStr, http.StatusBadRequest)
+    return
+  }
+  hasta, err := time.Parse("2006-01-02T00:00:00Z", r.URL.Query().Get("hasta"))
+  if err != nil {
+    errorStr := fmt.Sprintf("Error en la fecha ingresada 'hasta', %v", err)
+    http.Error(w, errorStr, http.StatusBadRequest)
+    return
+  }
+  
+  rows, err := db.Query("SELECT id, tipo, monto, descripcion, grupo, fecha, creado FROM movimientos WHERE fecha BETWEEN ? AND ?", desde, hasta)
+  if err != nil {
+    http.Error(w, "Error al consultar los regustris en la base de datos.", http.StatusInternalServerError)
+    return
+  }
+  defer rows.Close()
+  
+  var movimientos []Movimiento
+  
+  for rows.Next() {
+    var m Movimiento
+    err := rows.Scan(&m.Id, &m.Tipo, &m.Monto, &m.Descripcion, &m.Grupo, &m.Fecha, &m.Creado)
+    if err != nil {
+      errorStr := fmt.Sprintf("Error al escanear en la escmtructura cada moviviento, %v", err)
+      http.Error(w, errorStr, http.StatusInternalServerError)
+    }
+    
+    movimientos = append(movimientos, m)
+  }
+  
+  // Obtener la fecha actual en formato YYYY-MM-DD
+	fechaActual := time.Now().Format("2006-01-02")
+	nombreArchivo := fmt.Sprintf("movimientos_%s.csv", fechaActual)
+
+	// Crear el archivo nuevo
+	archivo, err := os.OpenFile(nombreArchivo, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+  if err != nil {
+    http.Error(w, "Error al crear al erchivo", http.StatusInternalServerError)
+    return
+  }
+	defer archivo.Close()
+  
+  writer := csv.NewWriter(archivo)
+  defer writer.Flush()
+    
+  for _, fila := range movimientos {
+    err = writer.Write(movimientoASlice(fila))
+    if err != nil {
+      errorStr := fmt.Sprintf("Error al escribir el el archivo. %v", err)
+      http.Error(w, errorStr, http.StatusInternalServerError)
+      return
+    }
+  }
+  
+  w.Header().Set("Content-Type", "application/json")
+  w.WriteHeader(http.StatusCreated)
 }
 
 //POSTS
@@ -416,7 +562,8 @@ func main() {
   r.HandleFunc("/movimiento/{id}", getById).Methods("GET")
   r.HandleFunc("/movimiento/{id}", putById).Methods("PUT")
   r.HandleFunc("/movimiento/{id}", deleteById).Methods("DELETE")
-  r.HandleFunc("/export/{type}", holaMundo).Methods("GET")
+  r.HandleFunc("/export/{type}", exportMovimientos).Methods("GET")
+  r.HandleFunc("/csvRango", exportCsvFechas).Methods("GET")
   
   
   
