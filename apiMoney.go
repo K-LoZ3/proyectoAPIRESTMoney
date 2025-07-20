@@ -178,18 +178,23 @@ func exportFechas(w http.ResponseWriter, r *http.Request) {
   }
   
 	if tipo == "csv" {
-	  //creamos el archivo .csv
-    archivo, err := crearArchivo(tipo)
-  	defer archivo.Close()
+	  
+    //establecemos las cabeceras para indicar que es una descarga de archivo CSV
+	  w.Header().Set("Content-Disposition", "attachment; filename=registros.csv")
+	  //le informamos el tipo de arcrivo que sera.
+	  w.Header().Set("Content-Type", "text/csv")
     
-    //creamos un writer del archivo para poder escrubirle
-    writer := csv.NewWriter(archivo)
-    defer writer.Flush()
+    //creamos un writer del resposeWriter para poder escribirle
+    writer := csv.NewWriter(w)
+    defer writer.Flush() //Lo liberamos
+    
+    // Encabezado para el archivo
+	  writer.Write([]string{"Tipo", "Monto", "Descripcion", "Grupo", "Fecha"})
     
     //Recirremos el slite de movimientos para imprimirlos en cada fila del csv  
     for _, fila := range registros {
-      //La funcion movimientoASlice pass cada estructura tupo Movimiento a
-      //un slite de string
+      //La funcion movimientoASlice pasa cada estructura tupo Registro a
+      //un slite de string con solo los campos de tipo, monto, Descripcion, grupo y fecha
       err = writer.Write(movimientoASlice(fila))
       if err != nil {
         errorStr := fmt.Sprintf("Error al escribir el el archivo. %v", err)
@@ -198,23 +203,22 @@ func exportFechas(w http.ResponseWriter, r *http.Request) {
       }
     }
 	} else {
-	  //creamos el archivo .json
-	  archivo, err := crearArchivo(tipo)
-  	defer archivo.Close()
+    //establecemos las cabeceras para indicar que es una descarga de archivo CSV
+	  w.Header().Set("Content-Disposition", "attachment; filename=registros.json")
+	  //le informamos el tipo de arcrivo que sera.
+	  w.Header().Set("Content-Type", "application/json")
   	
   	//Creamos un Encoder del archivo para escribir formato json en el.
-  	encoder := json.NewEncoder(archivo)
+  	encoder := json.NewEncoder(w)
   	encoder.SetIndent("", "  ")
   	//escribimos todo el slite de movimientos
-  	err = encoder.Encode(registros)
+  	err = encoder.Encode(registrosASimples(registros))
   	if err != nil {
   	  http.Error(w, "Error al escribir en el archivo", http.StatusInternalServerError)
   	  return
   	}
 	}
   
-  w.Header().Set("Content-Type", "application/json")
-  w.WriteHeader(http.StatusCreated)
 }
 
 //POSTS
@@ -398,13 +402,13 @@ func main() {
   
   
   server := http.Server{
-    Addr: "10.151.44.98:8080",
+    Addr: "100.68.49.243:8080",
     Handler: r,
     WriteTimeout: 10 * time.Second,
     ReadTimeout: 10 * time.Second,
     MaxHeaderBytes: 1 << 20,
   }
   
-  log.Println("Listening in http://10.151.44.98:8080...")
+  log.Println("Listening in http://100.68.49.243:8080...")
   log.Fatal(server.ListenAndServe())
 }

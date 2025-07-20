@@ -25,6 +25,14 @@ type Registro struct {
   Usuario string `json:"usuario"`
 }
 
+type RegistroSimple struct {
+  Tipo string `json:"tipo"`
+  Monto int `json:"monto"`
+  Descripcion string `json:"descripcion"`
+  Grupo string `json:"grupo"`
+  Fecha time.Time `json:"fecha"`
+}
+
 //Funcion que crea la base de datos. crea el archivo y
 //la inicializa si no existe
 func initDB() {
@@ -66,14 +74,26 @@ func comprobarInfoRequest(m Registro) error{
 //Esta funcion es para escribir en el archivo .csv
 func movimientoASlice(m Registro) []string {
 	return []string{
-		strconv.Itoa(m.Id),
 		m.Tipo,
 		strconv.Itoa(m.Monto),
 		m.Descripcion,
 		m.Grupo,
 		m.Fecha.Format("2006-01-02"),
-		m.Usuario,
 	}
+}
+
+func registrosASimples(registros []Registro) (s []RegistroSimple) {
+  for _, m := range registros {
+    s = append(s, RegistroSimple{
+      m.Tipo,
+		  m.Monto,
+		  m.Descripcion,
+		  m.Grupo,
+		  m.Fecha,
+    })
+  }
+  
+  return 
 }
 
 //getRegistros consulta en la base de datos los registros que coincidan con el
