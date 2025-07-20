@@ -14,19 +14,6 @@ import (
   "github.com/gorilla/mux"
 )
 
-//Estructura movimiento: para la base de datos manejaremos los movimientos positivos y negativos
-//con la misma estructura. El campo tipo sera el que ayude a identificar si el valor es un egreso
-//o un ingreso y le dara la naturaleza al movimiento. En la bd se usara una tabla.
-type Movimiento struct {
-  Id int `json:"id"`
-  Tipo string `json:"tipo"`
-  Monto int `json:"monto"`
-  Descripcion string `json:"descripcion"`
-  Grupo string `json:"grupo"`
-  Fecha time.Time `json:"fecha"`
-  Creado time.Time `json:"creado"`
-}
-
 var db *sql.DB
 
 //GETS
@@ -35,23 +22,10 @@ var db *sql.DB
 //los envia en formati json al navegador.
 func getEgresos(w http.ResponseWriter, r *http.Request) {
   //consultamos en la tabla los egresos
-  rows, err := db.Query("SELECT id, tipo, monto, descripcion, grupo, fecha, creado FROM movimientos WHERE tipo = ?", "egreso")
-  //Comprobamos el error
+  //CAMBIAR USUARIO CUANDO SE HAGA EL LOGIN
+  registros, err := getRegistros("egreso", "carlos")
   if err != nil {
-    http.Error(w, "Error al leer los datos de la tabla.", http.StatusBadRequest)
-   return 
-  }
-  defer rows.Close() //cerramos la base de datos
-  
-  //Creamos el slice para agrupar todos los egresos
-  var movimientos []Movimiento
-  
-  //Pasamos los registros a un slite de Movimiento que almacenara todo para
-  //escribirlo en el archivoo
-  movimientos, err = dbRowsAMovimientos(rows)
-  if err != nil {
-    errorStr := fmt.Sprintf("Error al escaner los movimientos %v", err)
-    http.Error(w, errorStr, http.StatusInternalServerError)
+    writeError(w, "Error en al consultar los registros", err, http.StatusInternalServerError)
     return
   }
   
@@ -60,29 +34,14 @@ func getEgresos(w http.ResponseWriter, r *http.Request) {
   w.WriteHeader(http.StatusOK)
   //Pasamos todos los datos del slice a json y los enviamos
   //al usuario, valodamos el error
-  err = json.NewEncoder(w).Encode(movimientos)
-  if err != nil {
-    http.Error(w, "error al enviar los datos del getEgresos", http.StatusInternalServerError)
-  }
+  json.NewEncoder(w).Encode(registros)
 }
 
 func getIngresos(w http.ResponseWriter, r *http.Request) {
   //consultamos los movimientos tipo ingreso, validamos el error.
-  rows, err := db.Query("SELECT id, tipo, monto, descripcion, grupo, fecha, creado FROM movimientos WHERE tipo = ?", "ingreso")
+  registros, err := getRegistros("ingreso", "carlos")
   if err != nil {
-    http.Error(w, "Error al consultar los ingresos el la db.", http.StatusBadRequest)
-    return
-  }
-  defer rows.Close()
-  
-  //Creo la variable para almacenar los movimientos
-  var movimientos []Movimiento
-  //Pasamos los registros a un slite de Movimiento que almacenara todo para
-  //escribirlo en el archivoo
-  movimientos, err = dbRowsAMovimientos(rows)
-  if err != nil {
-    errorStr := fmt.Sprintf("Error al escaner los movimientos %v", err)
-    http.Error(w, errorStr, http.StatusInternalServerError)
+    writeError(w, "Error en al consultar los registros", err, http.StatusInternalServerError)
     return
   }
   
@@ -91,9 +50,9 @@ func getIngresos(w http.ResponseWriter, r *http.Request) {
   w.WriteHeader(http.StatusOK)
   //Pasamos todos los datos del slice a json y los enviamos
   //al usuario, valodamos el error
-  err = json.NewEncoder(w).Encode(movimientos)
+  err = json.NewEncoder(w).Encode(registros)
   if err != nil {
-    http.Error(w, "error al enviar los datos del getEgresos", http.StatusInternalServerError)
+    http.Error(w, "error al enviar los datos del getIngresos", http.StatusInternalServerError)
   }
 }
 
@@ -114,15 +73,10 @@ func getTotalEgresos(w http.ResponseWriter, r *http.Request) {
     http.Error(w, errorStr, http.StatusBadRequest)
     return
   }
-  //variable para escanear el total
-  var total int
-  //Consultamos de monto los valores con el tipo "egreso" y los sumamos.
-  //asegurqndo con COALESCE que no devuelva nil siempre que no tenga valores
-  //entre las fechas dadas. Validamos el error y scaneamos el total.
-  err = db.QueryRow("SELECT COALESCE(SUM(monto), 0) FROM movimientos WHERE tipo = ? AND fecha BETWEEN ? AND ?", "egreso", desde, hasta).Scan(&total)
+  
+  total, err := getTotal("egreso", desde, hasta, "carlos")
   if err != nil {
-    errorStr := fmt.Sprintf("Error al consultar y sumar los egresos de la base de datos, %v", err)
-    http.Error(w, errorStr, http.StatusInternalServerError)
+    writeError(w, "Error en al consultar los registros", err, http.StatusInternalServerError)
     return
   }
   
@@ -152,13 +106,9 @@ func getTotalIngresos(w http.ResponseWriter, r *http.Request) {
     return
   }
   
-  //Creo la variabke que escaneara el valor de la suma de la consulta
-  var total int
-  //Realizamos la consulta en la tabla, COALESCE(,) asegura que no
-  //retornara nil si no hay valores que sumar, validamos el error.
-  err = db.QueryRow("SELECT COALESCE(SUM(monto), 0) FROM movimientos WHERE tipo = ? AND fecha BETWEEN ? AND ?", "ingreso", desde, hasta).Scan(&total)
+ total, err := getTotal("ingreso", desde, hasta, "carlos")
   if err != nil {
-    http.Error(w, "Error al consultar y sumar los ingresos.", http.StatusInternalServerError)
+    writeError(w, "Error en al consultar los registros", err, http.StatusInternalServerError)
     return
   }
   
@@ -180,14 +130,9 @@ func getById(w http.ResponseWriter, r *http.Request) {
     return
   }
   
-  //Estructura para obtener los datos de la base de dato.
-  var m Movimiento
-  
-  //consultamos por id y validamos el error.
-  err = db.QueryRow("SELECT id, tipo, monto, descripcion, grupo, fecha, creado FROM movimientos WHERE id = ?", id).Scan(&m.Id, &m.Tipo, &m.Monto, &m.Descripcion, &m.Grupo, &m.Fecha, &m.Creado)
+  m, err := getRegistroById(id, "carlos")
   if err != nil {
-    errorStr := fmt.Sprintf("Error al consultar en la base de datos el id ingresado. %v", err)
-    http.Error(w, errorStr, http.StatusInternalServerError)
+    writeError(w, "Error en al consultar el registro", err, http.StatusInternalServerError)
     return
   }
   
@@ -221,21 +166,9 @@ func exportFechas(w http.ResponseWriter, r *http.Request) {
   }
   
   //Consultamos la base de datis, validamos el error.
-  rows, err := db.Query("SELECT id, tipo, monto, descripcion, grupo, fecha, creado FROM movimientos WHERE fecha BETWEEN ? AND ?", desde, hasta)
+  registros, err := getRegistrosFechas(desde, hasta, "carlos")
   if err != nil {
-    http.Error(w, "Error al consultar los regustris en la base de datos.", http.StatusInternalServerError)
-    return
-  }
-  defer rows.Close()
-  
-  var movimientos []Movimiento
-  
-  //Pasamos los registros a un slite de Movimiento que almacenara todo para
-  //escribirlo en el archivoo
-  movimientos, err = dbRowsAMovimientos(rows)
-  if err != nil {
-    errorStr := fmt.Sprintf("Error al escaner los movimientos %v", err)
-    http.Error(w, errorStr, http.StatusInternalServerError)
+    writeError(w, "Error al consultar los regustris en la base de datos.", err, http.StatusInternalServerError)
     return
   }
   
@@ -249,7 +182,7 @@ func exportFechas(w http.ResponseWriter, r *http.Request) {
     defer writer.Flush()
     
     //Recirremos el slite de movimientos para imprimirlos en cada fila del csv  
-    for _, fila := range movimientos {
+    for _, fila := range registros {
       //La funcion movimientoASlice pass cada estructura tupo Movimiento a
       //un slite de string
       err = writer.Write(movimientoASlice(fila))
@@ -268,7 +201,7 @@ func exportFechas(w http.ResponseWriter, r *http.Request) {
   	encoder := json.NewEncoder(archivo)
   	encoder.SetIndent("", "  ")
   	//escribimos todo el slite de movimientos
-  	err = encoder.Encode(movimientos)
+  	err = encoder.Encode(registros)
   	if err != nil {
   	  http.Error(w, "Error al escribir en el archivo", http.StatusInternalServerError)
   	  return
@@ -285,7 +218,7 @@ func exportFechas(w http.ResponseWriter, r *http.Request) {
 //Json ejemplo{"monto": 22,"fecha": "2024-12-05T00:00:00Z"}
 func postEgreso(w http.ResponseWriter, r *http.Request) {
   //Creo la variable para almacenar los datos que envia el cliente
-  var m Movimiento
+  var m Registro
   //Decodifico el dato de un json a la variable creada al mismo tiempo que evaluo el error
   err := json.NewDecoder(r.Body).Decode(&m)
   if err != nil {
@@ -293,7 +226,7 @@ func postEgreso(w http.ResponseWriter, r *http.Request) {
     return
   }
   //validamos que si engresara los campos obligatorios
-  err = comprobarMovimiento(m)
+  err = comprobarInfoRequest(m)
   if err != nil {
     http.Error(w, "Error, datos omitidos en el egreso", http.StatusBadRequest)
     return
@@ -301,10 +234,9 @@ func postEgreso(w http.ResponseWriter, r *http.Request) {
   
   //Establesco las variables que se usaran para la manejar los movimientos.
   m.Tipo = "egreso"
-  m.Creado = time.Now()
   
   //Insertamos los datos en la tabla movimienos de la base de datos
-  _, err = db.Exec("INSERT INTO movimientos ( tipo, monto, descripcion, grupo, fecha, creado ) VALUES(?, ?, ?, ?, ?, ?)", m.Tipo, m.Monto, m.Descripcion, m.Grupo, m.Fecha, m.Creado)
+  _, err = db.Exec("INSERT INTO registros ( tipo, monto, descripcion, grupo, fecha, usuario ) VALUES(?, ?, ?, ?, ?, ?)", m.Tipo, m.Monto, m.Descripcion, m.Grupo, m.Fecha, m.Usuario)
   //Valido el error al insertar los datos
   if err != nil {
     http.Error(w, "Error al insertar egreso en la tabla.", http.StatusInternalServerError)
@@ -325,7 +257,7 @@ func postEgreso(w http.ResponseWriter, r *http.Request) {
 
 //postIngreso agrega a la base de datos un movimiento con el tipo ingreso
 func postIngreso(w http.ResponseWriter, r *http.Request) {
-  var m Movimiento
+  var m Registro
   //leemos los datos json y los pasamos a las estructura
   //comprobamos el error
   err := json.NewDecoder(r.Body).Decode(&m)
@@ -336,17 +268,16 @@ func postIngreso(w http.ResponseWriter, r *http.Request) {
   }
   
   //validamos que si ingresara los campos obligatorios
-  err = comprobarMovimiento(m)
+  err = comprobarInfoRequest(m)
   if err != nil {
     http.Error(w, "Error, datos de movimiento omitidos.", http.StatusBadRequest)
     return
   }
   
   m.Tipo = "ingreso"
-  m.Creado = time.Now()
   
     //Insertamos los datos en la tabla movimienos de la base de datos
-  _, err = db.Exec("INSERT INTO movimientos ( tipo, monto, descripcion, grupo, fecha, creado ) VALUES(?, ?, ?, ?, ?, ?)", m.Tipo, m.Monto, m.Descripcion, m.Grupo, m.Fecha, m.Creado)
+  _, err = db.Exec("INSERT INTO registros ( tipo, monto, descripcion, grupo, fecha, usuario ) VALUES(?, ?, ?, ?, ?, ?)", m.Tipo, m.Monto, m.Descripcion, m.Grupo, m.Fecha, m.Usuario)
   //Valido el error al insertar los datos
   if err != nil {
     http.Error(w, "Error al insertar ingreso en la tabla.", http.StatusInternalServerError)
@@ -382,7 +313,7 @@ func putById(w http.ResponseWriter, r *http.Request) {
   
   //Variable para extraer los datos a actualizar.
   //De momenro los actualiza asumiendo que pasa todos los datos.
-  var m Movimiento
+  var m Registro
   //Pasamos los datos a la variable y comprobamos el error.
   err = json.NewDecoder(r.Body).Decode(&m)
   if err != nil {
@@ -392,7 +323,7 @@ func putById(w http.ResponseWriter, r *http.Request) {
   }
   
   //Actualizamos los datos en la tabla por id y validamos el error.
-  _, err = db.Exec("UPDATE movimientos SET monto = ?, descripcion = ?, grupo = ?, fecha = ? WHERE id = ?", m.Monto, m.Descripcion, m.Grupo, m.Fecha, id)
+  _, err = db.Exec("UPDATE registros SET monto = ?, descripcion = ?, grupo = ?, fecha = ? WHERE id = ?", m.Monto, m.Descripcion, m.Grupo, m.Fecha, id)
   if err != nil {
     errorStr := fmt.Sprintf("Error al actualizar el registro en la base de datos con el id ingresado. %v", err)
     http.Error(w, errorStr, http.StatusInternalServerError)
@@ -416,7 +347,7 @@ func deleteById(w http.ResponseWriter, r *http.Request) {
   }
   
   //preparamos la instruccion para sqlite.
-  stmt, err := db.Prepare("DELETE FROM movimientos WHERE id = ?")
+  stmt, err := db.Prepare("DELETE FROM registros WHERE id = ?")
   if err != nil {
     http.Error(w, "Error preparando SQL", http.StatusInternalServerError)
     return

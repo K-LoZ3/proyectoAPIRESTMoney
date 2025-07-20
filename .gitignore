@@ -1,6 +1,6 @@
 apiMoney
 miniProyecto
 
-movimientos.db
+*.db
 *.csv
 *.json
