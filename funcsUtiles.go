@@ -221,13 +221,23 @@ func getRegistroById(id int, usuario string) (Registro, error) {
 
 //guardarUsuario guarda un usuario y su clave hasheada.
 func guardarUsuario(u Usuario) error {
-  u.Clave = bcrypt.GenerateFromPassword([]byte(u.Clave), bcrypt.DefaultCost)
+  u.Clave = string(bcrypt.GenerateFromPassword([]byte(u.Clave), bcrypt.DefaultCost))
   
-  _, err := db..Exec("INSERT INTO usuarios( nombre, clave ) VALUES( ?, ? )", u.Nombre, u.Clave)
+  _, err := db.Exec("INSERT INTO usuarios( nombre, clave ) VALUES( ?, ? )", u.Nombre, u.Clave)
   if err != nil {
     return err
   }
   return nil
+}
+
+func comorobarUsuario(u Usuario) error {
+  var hashUser string
+  err := db.QueryRow("SELECT clave WHERE usuario = ?", u.Nombre).Scan(&hashUser)
+  if err != nil {
+    return err
+  }
+  
+  return bcrypt.CompareHashAndPassword(hashUser, u.Clave)
 }
 
 //CAMBIAR A ENVIARLE EL ARCHIVO AL USUARIO

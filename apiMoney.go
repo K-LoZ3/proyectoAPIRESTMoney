@@ -321,6 +321,22 @@ func registrar(w http.ResponseWriter, r *http.Request) {
   
 }
 
+func login(w http.ResponseWriter, r *http.Request) {
+  var u usuario
+  err := json.NewDecoder(r.Body).Decode(&u)
+  if err != nil {
+    writeError(w, "Error al obtener los datos del body", err, http.StatusBadRequest)
+  }
+  
+  err = comprobarUsuario(u)
+  if err != nil {
+    writeError(w, "Error el usuario o contraseña incorecto.", err, http.StatusInternalServerError)
+  }
+  
+  //TODO:
+  //devolver el jwt
+}
+
 //PUTS
 
 //putById actualiza un registro en la tabla segun el id que se pase como
