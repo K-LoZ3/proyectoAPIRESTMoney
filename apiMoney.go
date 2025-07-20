@@ -333,8 +333,17 @@ func login(w http.ResponseWriter, r *http.Request) {
     writeError(w, "Error el usuario o contraseña incorecto.", err, http.StatusInternalServerError)
   }
   
-  //TODO:
-  //devolver el jwt
+  tokenString, err := crearJWT(u.Nombre)
+  if err != nil {
+    writeError(w, "Error al crear el jwt.", err, http.StatusInternalServerError)
+    return
+  }
+  
+  //Enviamos el token
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"token": tokenString,
+	})
 }
 
 //PUTS

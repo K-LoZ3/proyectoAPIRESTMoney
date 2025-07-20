@@ -10,6 +10,7 @@ import (
   "net/http"
   
   "golang.org/x/crypto/bcrypt"
+  "github.com/golang-jwt/jwt"
   _ "modernc.org/sqlite"
 )
 
@@ -238,6 +239,22 @@ func comorobarUsuario(u Usuario) error {
   }
   
   return bcrypt.CompareHashAndPassword(hashUser, u.Clave)
+}
+
+func crearJWT(nombre string) {
+  firma := os.Getenv("FRASE")
+  
+  token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"nombreUsuario": nombre,
+		"exp": time.Now().Add(2 * time.Hour).Unix(),
+	})
+
+	tokenString, err := token.SignedString([]byte(firma))
+	if err != nil {
+		return "", err
+	}
+	
+	return tokenString, nil
 }
 
 //CAMBIAR A ENVIARLE EL ARCHIVO AL USUARIO
