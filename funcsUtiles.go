@@ -9,6 +9,7 @@ import (
   "time"
   "net/http"
   
+  "golang.org/x/crypto/bcrypt"
   _ "modernc.org/sqlite"
 )
 
@@ -25,12 +26,19 @@ type Registro struct {
   Usuario string `json:"usuario"`
 }
 
+//Escructura para dar respuesta de los datos. De momebto solo usada en 
+//la funcion que exporta para el tipo de archivo csv
 type RegistroSimple struct {
   Tipo string `json:"tipo"`
   Monto int `json:"monto"`
   Descripcion string `json:"descripcion"`
   Grupo string `json:"grupo"`
   Fecha time.Time `json:"fecha"`
+}
+
+type Usuario {
+  Nombre string `json:"nombre"`
+  clave string `json:"clave"`
 }
 
 //Funcion que crea la base de datos. crea el archivo y
@@ -53,9 +61,23 @@ func initDB() {
   usuario TEXT
   );`
   
+  crearTablaUsuarios := `
+  CREATE TABLA IF NOT EXISTS usuarios(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  nombre TEXT UNIQUE NOT NULL,
+  clave TEXT NOT NULL
+  );`
+  
+  //crear tabla para registros.
   _, err = db.Exec(crearTabla)
   if err != nil {
     log.Fatal("Error creando la tabla", err)
+  }
+  
+    //crear tabla para usuarios y claves
+  _, err = db.Exec(crearTablaUsuarios)
+  if err != nil {
+    log.Fatal("Error creando la tabla usuarios", err)
   }
 }
 
@@ -195,6 +217,17 @@ func getRegistroById(id int, usuario string) (Registro, error) {
   }
   
   return m, err
+}
+
+//guardarUsuario guarda un usuario y su clave hasheada.
+func guardarUsuario(u Usuario) error {
+  u.Clave = bcrypt.GenerateFromPassword([]byte(u.Clave), bcrypt.DefaultCost)
+  
+  _, err := db..Exec("INSERT INTO usuarios( nombre, clave ) VALUES( ?, ? )", u.Nombre, u.Clave)
+  if err != nil {
+    return err
+  }
+  return nil
 }
 
 //CAMBIAR A ENVIARLE EL ARCHIVO AL USUARIO

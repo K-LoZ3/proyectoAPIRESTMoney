@@ -12,6 +12,7 @@ import (
   
   _ "modernc.org/sqlite"
   "github.com/gorilla/mux"
+  "github.com/joho/godotenv"
 )
 
 var db *sql.DB
@@ -285,7 +286,7 @@ func postIngreso(w http.ResponseWriter, r *http.Request) {
   
   m.Tipo = "ingreso"
   
-    //Insertamos los datos en la tabla movimienos de la base de datos
+  //Insertamos los datos en la tabla movimienos de la base de datos
   _, err = db.Exec("INSERT INTO registros ( tipo, monto, descripcion, grupo, fecha, usuario ) VALUES(?, ?, ?, ?, ?, ?)", m.Tipo, m.Monto, m.Descripcion, m.Grupo, m.Fecha, m.Usuario)
   //Valido el error al insertar los datos
   if err != nil {
@@ -302,6 +303,22 @@ func postIngreso(w http.ResponseWriter, r *http.Request) {
   if err != nil {
     http.Error(w, "Error al escribir el json con los datos que se ingresaron.", http.StatusInternalServerError)
   }
+}
+
+func registrar(w http.ResponseWriter, r *http.Request) {
+  var u usuario
+  err := json.NewDecoder(r.Body).Decode(&u)
+  if err != nil {
+    writeError(w, "Error al obtener los datos del body", err, http.StatusBadRequest)
+  }
+  
+  err = guardarUsuario(u)
+  if err != nil {
+    writeError(w, "Error al guardar el usuario y clave.", err, http.StatusInternalServerError)
+  }
+  
+  w.WriteHeader(http.StatusCreated)
+  
 }
 
 //PUTS
@@ -384,20 +401,28 @@ func deleteById(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+  //Cargamos el godotenv para poder ver la ckave secreta que gebera el jwt
+  err := godotenv.Load()
+  if err != nil {
+    log.Fatal("Error cargando .env")
+  }
+  
   initDB()
   defer db.Close()
   r := mux.NewRouter()
   
   r.HandleFunc("/egreso", getEgresos).Methods("GET")
   r.HandleFunc("/ingreso", getIngresos).Methods("GET")
-  r.HandleFunc("/ingreso", postIngreso).Methods("POST")
-  r.HandleFunc("/egreso", postEgreso).Methods("POST")
   r.HandleFunc("/totalEgresos", getTotalEgresos).Methods("GET")
   r.HandleFunc("/totalIngresos", getTotalIngresos).Methods("GET")
   r.HandleFunc("/movimiento/{id}", getById).Methods("GET")
+  r.HandleFunc("/exportRango", exportFechas).Methods("GET")
+  r.HandleFunc("/ingreso", postIngreso).Methods("POST")
+  r.HandleFunc("/egreso", postEgreso).Methods("POST")
+  r.HandleFunc("/registrar", registrar).Methods("POST")
+  r.HandleFunc("/login", login).Methods("POST")
   r.HandleFunc("/movimiento/{id}", putById).Methods("PUT")
   r.HandleFunc("/movimiento/{id}", deleteById).Methods("DELETE")
-  r.HandleFunc("/exportRango", exportFechas).Methods("GET")
   
   
   

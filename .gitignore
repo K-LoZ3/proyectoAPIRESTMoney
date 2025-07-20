@@ -1,6 +1,7 @@
 apiMoney
 miniProyecto
 
+*.env
 *.db
 *.csv
 *.json
