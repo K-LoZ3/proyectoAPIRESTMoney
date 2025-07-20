@@ -12,7 +12,7 @@ import (
   _ "modernc.org/sqlite"
 )
 
-//Estructura regustro: para la base de datos manejaremos los movimientos positivos y negativos
+//Estructura registro: para la base de datos manejaremos los movimientos positivos y negativos
 //con la misma estructura. El campo tipo sera el que ayude a identificar si el valor es un egreso
 //o un ingreso y le dara la naturaleza al movimiento. En la bd se usara una tabla.
 type Registro struct {
@@ -51,6 +51,9 @@ func initDB() {
   }
 }
 
+//comprobarInfoRequest se encarga de comprobar si para un registro los datos
+//estan el el formato correcto y si estan completos.
+//ToDo: AGREGAR LAS VALIDACIONES DE DATOS PARA DAR MAS SEGURIDAD
 func comprobarInfoRequest(m Registro) error{
   if m.Monto == 0 || m.Fecha.IsZero() {
     return fmt.Errorf("Error al ingresar los datos, datos importantes son omitidos")
@@ -58,7 +61,7 @@ func comprobarInfoRequest(m Registro) error{
   return nil
 }
 
-//movimientoASlice convierte una escmtructura de tipo Movimiento
+//movimientoASlice convierte una escmtructura de tipo Registro
 //para luego pasarlo a un slite de string.
 //Esta funcion es para escribir en el archivo .csv
 func movimientoASlice(m Registro) []string {
@@ -73,14 +76,18 @@ func movimientoASlice(m Registro) []string {
 	}
 }
 
+//getRegistros consulta en la base de datos los registros que coincidan con el
+//usuario y tipo de registro dado.
 func getRegistros(tipo string, usuario string) (registros []Registro, err error) {
   
+  //el puntero que recibira la consulta Query, lo usaremos para escanaer los datos.
   var rows *sql.Rows
   
   if tipo == "todos" {
-      //consultamos en la tabla los egresos
+      //consultamos en la tabla todos los registros
     rows, err = db.Query("SELECT id, tipo, monto, descripcion, grupo, fecha, usuario FROM registros WHERE usuario = ?", usuario)
   } else {
+    //consultamos en la tabla los registros segun el tipo.
     rows, err = db.Query("SELECT id, tipo, monto, descripcion, grupo, fecha, usuario FROM registros WHERE tipo = ? AND usuario = ?", tipo, usuario)
   }
   //Comprobamos el error
@@ -88,12 +95,12 @@ func getRegistros(tipo string, usuario string) (registros []Registro, err error)
     err = fmt.Errorf("Error al leer los datos de la tabla, %v", err)
     return 
   }
-  defer rows.Close() //cerramos la base de datos
+  defer rows.Close() //cerramos la base de consulta
   
-  //Recibiremos la base de datos para luego agregarla a slite.
   //Recorremos cada fila con el for.
   for rows.Next() {
     var m Registro//Variable para escanear los registros
+    
     //Escaneamos cada registo ya que es un for y cada vez escaneamos y comprobamos el error.
     err = rows.Scan(&m.Id, &m.Tipo, &m.Monto, &m.Descripcion, &m.Grupo, &m.Fecha, &m.Usuario)
     if err != nil {
@@ -101,13 +108,15 @@ func getRegistros(tipo string, usuario string) (registros []Registro, err error)
       return
     }
     
-    //Almacenamos los datos.
+    //Almacenamos los datos para retornarlos en un slite
     registros = append(registros, m)
   }
   
   return 
 }
 
+//getRegistrosFechas devuelve los registros que esten dentro de las fechas
+//dadas para cada usuario.
 func getRegistrosFechas(desde time.Time, hasta time.Time, usuario string) (registros []Registro, err error) {
   //consultamos en la tabla los egresos
   rows, err := db.Query("SELECT id, tipo, monto, descripcion, grupo, fecha, usuario FROM registros WHERE usuario = ? AND fecha BETWEEN ? AND ?", usuario, desde, hasta)
@@ -117,9 +126,8 @@ func getRegistrosFechas(desde time.Time, hasta time.Time, usuario string) (regis
     err = fmt.Errorf("Error al leer los datos de la tabla, %v", err)
     return 
   }
-  defer rows.Close() //cerramos la base de datos
+  defer rows.Close() //cerramos la consulta
   
-  //Recibiremos la base de datos para luego agregarla a slite.
   //Recorremos cada fila con el for.
   for rows.Next() {
     var m Registro//Variable para escanear los registros
@@ -130,18 +138,20 @@ func getRegistrosFechas(desde time.Time, hasta time.Time, usuario string) (regis
       return
     }
     
-    //Almacenamos los datos.
+    //Almacenamos los datos para luego retornar el slite
     registros = append(registros, m)
   }
   
   return 
 }
 
+//getTotal retorna la suma de cada registro que este dentro del rango dado
+//dependiendo del tipo y el usuario.
 func getTotal(tipo string, desde time.Time, hasta time.Time, usuario string) (int, error) {
     //variable para escanear el total
   var total int
-  //Consultamos de monto los valores con el tipo "egreso" y los sumamos.
-  //asegurqndo con COALESCE que no devuelva nil siempre que no tenga valores
+  //Consultamos cada monto que coincida con el tipo y los sumamos.
+  //asegurando con COALESCE que no devuelva nil siempre que no tenga valores
   //entre las fechas dadas. Validamos el error y scaneamos el total.
   err := db.QueryRow("SELECT COALESCE(SUM(monto), 0) FROM registros WHERE tipo = ? AND usuario = ? AND fecha BETWEEN ? AND ?", tipo, usuario, desde, hasta).Scan(&total)
   if err != nil {
@@ -152,6 +162,7 @@ func getTotal(tipo string, desde time.Time, hasta time.Time, usuario string) (in
   return total, err
 }
 
+//getRegistroById retorna un registro segun el id y el usuario.
 func getRegistroById(id int, usuario string) (Registro, error) {
   //Estructura para obtener los datos de la base de dato.
   var m Registro
@@ -165,8 +176,6 @@ func getRegistroById(id int, usuario string) (Registro, error) {
   
   return m, err
 }
-
-
 
 //CAMBIAR A ENVIARLE EL ARCHIVO AL USUARIO
 func crearArchivo(tipo string) (archivo *os.File, err error) {
@@ -184,6 +193,7 @@ func crearArchivo(tipo string) (archivo *os.File, err error) {
   return
 }
 
+//writeError se encarga de escribir en el responseWriter el error dado.
 func writeError(w http.ResponseWriter, s string, err error, status int) {
   errorStr := fmt.Sprintf("Error: %s, Descripcion: %v", s, err)
   http.Error(w, errorStr, status)

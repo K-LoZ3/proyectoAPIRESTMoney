@@ -19,7 +19,7 @@ var db *sql.DB
 //GETS
 
 //getEgresos consulta los egresos en la tabla, que sean egresos y luego
-//los envia en formati json al navegador.
+//los envia en formato json al navegador.
 func getEgresos(w http.ResponseWriter, r *http.Request) {
   //consultamos en la tabla los egresos
   //CAMBIAR USUARIO CUANDO SE HAGA EL LOGIN
@@ -37,6 +37,7 @@ func getEgresos(w http.ResponseWriter, r *http.Request) {
   json.NewEncoder(w).Encode(registros)
 }
 
+//getIngresos consulta en la base de datos y retorna los ingresos ssegun el usuario.
 func getIngresos(w http.ResponseWriter, r *http.Request) {
   //consultamos los movimientos tipo ingreso, validamos el error.
   registros, err := getRegistros("ingreso", "carlos")
@@ -48,6 +49,7 @@ func getIngresos(w http.ResponseWriter, r *http.Request) {
   //Establecemos el header de tipo json
   w.Header().Set("Contenct-Type", "application/json")
   w.WriteHeader(http.StatusOK)
+ 
   //Pasamos todos los datos del slice a json y los enviamos
   //al usuario, valodamos el error
   err = json.NewEncoder(w).Encode(registros)
@@ -58,7 +60,7 @@ func getIngresos(w http.ResponseWriter, r *http.Request) {
 
 //getTotalEgresos devuelve el total de egresos dependiendo de las fechas
 //que se le pasen, sumara todo entre ellas y devolvera solo la suma
-//consulta http://100.69.187.16:8080/totalEgresos?desde=2024-12-20T00:00:00Z&hasta=2024-12-31T00:00:00Z
+//Ejm consulta http://100.69.187.16:8080/totalEgresos?desde=2024-12-20T00:00:00Z&hasta=2024-12-31T00:00:00Z
 func getTotalEgresos(w http.ResponseWriter, r *http.Request) {
   //Recibe las fechas y en el formato para time.Time y validamos el error.
   desde, err := time.Parse("2006-01-02T00:00:00Z", r.URL.Query().Get("desde"))
@@ -74,6 +76,7 @@ func getTotalEgresos(w http.ResponseWriter, r *http.Request) {
     return
   }
   
+  //consultamos en la tabla egresos con fecha de inicio y fin.
   total, err := getTotal("egreso", desde, hasta, "carlos")
   if err != nil {
     writeError(w, "Error en al consultar los registros", err, http.StatusInternalServerError)
@@ -106,7 +109,8 @@ func getTotalIngresos(w http.ResponseWriter, r *http.Request) {
     return
   }
   
- total, err := getTotal("ingreso", desde, hasta, "carlos")
+  //consultamos en la tabla solos los ingresos entre las fechas.
+  total, err := getTotal("ingreso", desde, hasta, "carlos")
   if err != nil {
     writeError(w, "Error en al consultar los registros", err, http.StatusInternalServerError)
     return
@@ -119,7 +123,7 @@ func getTotalIngresos(w http.ResponseWriter, r *http.Request) {
   json.NewEncoder(w).Encode(jsonTotalIngresos)
 }
 
-//getById retorna un moviviento dependiendo solo del id que se pasa como
+//getById retorna un moviviento dependiendo del id y usuario que se pasa como
 //variqble en la URL. ejm: http://100.69.187.16:8080/movimiento/10
 func getById(w http.ResponseWriter, r *http.Request) {
   //Sacamos la variable.
@@ -130,6 +134,7 @@ func getById(w http.ResponseWriter, r *http.Request) {
     return
   }
   
+  //consultamos la tabla con id y usuario.
   m, err := getRegistroById(id, "carlos")
   if err != nil {
     writeError(w, "Error en al consultar el registro", err, http.StatusInternalServerError)
@@ -215,7 +220,7 @@ func exportFechas(w http.ResponseWriter, r *http.Request) {
 //POSTS
 
 //postEgreso agrega un moviviento en la tabla de tipo egreso, se resive con un Json.
-//Json ejemplo{"monto": 22,"fecha": "2024-12-05T00:00:00Z"}
+//Json ejemplo{"monto": 22,"fecha": "2024-12-05T00:00:00Z", "usuario": "carlos"}
 func postEgreso(w http.ResponseWriter, r *http.Request) {
   //Creo la variable para almacenar los datos que envia el cliente
   var m Registro
@@ -301,7 +306,7 @@ func postIngreso(w http.ResponseWriter, r *http.Request) {
 //variable por URL con los datos tipo json a travez del body. De momento se
 //asume que el cliente envia los datos completos.
 //ejm http://100.69.187.16:8080/movimiento/9
-// {"monto": 333, "grupo": "nuevo"}
+// {"monto": 333, "grupo": "nuevo", "usuario": "carlos"}
 //ToDo: LOS DATOS OMITIDOS DEJARLOS CON EL MISMO VALOR.
 func putById(w http.ResponseWriter, r *http.Request) {
   //Extraemos la el id de la URL y aseguramos que sea un int.
@@ -323,7 +328,7 @@ func putById(w http.ResponseWriter, r *http.Request) {
   }
   
   //Actualizamos los datos en la tabla por id y validamos el error.
-  _, err = db.Exec("UPDATE registros SET monto = ?, descripcion = ?, grupo = ?, fecha = ? WHERE id = ?", m.Monto, m.Descripcion, m.Grupo, m.Fecha, id)
+  _, err = db.Exec("UPDATE registros SET monto = ?, descripcion = ?, grupo = ?, fecha = ? WHERE id = ? AND usuario = ?", m.Monto, m.Descripcion, m.Grupo, m.Fecha, id, "carlos")
   if err != nil {
     errorStr := fmt.Sprintf("Error al actualizar el registro en la base de datos con el id ingresado. %v", err)
     http.Error(w, errorStr, http.StatusInternalServerError)
@@ -347,7 +352,7 @@ func deleteById(w http.ResponseWriter, r *http.Request) {
   }
   
   //preparamos la instruccion para sqlite.
-  stmt, err := db.Prepare("DELETE FROM registros WHERE id = ?")
+  stmt, err := db.Prepare("DELETE FROM registros WHERE id = ? AND usuario = ?")
   if err != nil {
     http.Error(w, "Error preparando SQL", http.StatusInternalServerError)
     return
@@ -356,7 +361,7 @@ func deleteById(w http.ResponseWriter, r *http.Request) {
   defer stmt.Close()
   
   //Ejecutamos la instruccion para eliminar el regustri.
-  res, err := stmt.Exec(id)
+  res, err := stmt.Exec(id, "carlos")
   if err != nil {
     http.Error(w, "Error ejecutando DELETE", http.StatusInternalServerError)
     return
