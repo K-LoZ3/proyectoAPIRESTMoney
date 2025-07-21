@@ -4,10 +4,12 @@ import (
   "fmt"
   "database/sql"
   "strconv"
+  "strings"
   "log"
   "os"
   "time"
   "net/http"
+  "context"
   
   "golang.org/x/crypto/bcrypt"
   "github.com/golang-jwt/jwt"
@@ -37,9 +39,9 @@ type RegistroSimple struct {
   Fecha time.Time `json:"fecha"`
 }
 
-type Usuario {
+type Usuario struct {
   Nombre string `json:"nombre"`
-  clave string `json:"clave"`
+  Clave string `json:"clave"`
 }
 
 //Funcion que crea la base de datos. crea el archivo y
@@ -63,7 +65,7 @@ func initDB() {
   );`
   
   crearTablaUsuarios := `
-  CREATE TABLA IF NOT EXISTS usuarios(
+  CREATE TABLE IF NOT EXISTS usuarios(
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   nombre TEXT UNIQUE NOT NULL,
   clave TEXT NOT NULL
@@ -222,26 +224,31 @@ func getRegistroById(id int, usuario string) (Registro, error) {
 
 //guardarUsuario guarda un usuario y su clave hasheada.
 func guardarUsuario(u Usuario) error {
-  u.Clave = string(bcrypt.GenerateFromPassword([]byte(u.Clave), bcrypt.DefaultCost))
+  hash, err := bcrypt.GenerateFromPassword([]byte(u.Clave), bcrypt.DefaultCost)
+  if err != nil {
+    return err
+  }
   
-  _, err := db.Exec("INSERT INTO usuarios( nombre, clave ) VALUES( ?, ? )", u.Nombre, u.Clave)
+  u.Clave = string(hash)
+  
+  _, err = db.Exec("INSERT INTO usuarios( nombre, clave ) VALUES( ?, ? )", u.Nombre, u.Clave)
   if err != nil {
     return err
   }
   return nil
 }
 
-func comorobarUsuario(u Usuario) error {
+func comprobarUsuario(u Usuario) error {
   var hashUser string
-  err := db.QueryRow("SELECT clave WHERE usuario = ?", u.Nombre).Scan(&hashUser)
+  err := db.QueryRow("SELECT clave FROM usuarios WHERE nombre = ?", u.Nombre).Scan(&hashUser)
   if err != nil {
     return err
   }
   
-  return bcrypt.CompareHashAndPassword(hashUser, u.Clave)
+  return bcrypt.CompareHashAndPassword([]byte(hashUser), []byte(u.Clave))
 }
 
-func crearJWT(nombre string) {
+func crearJWT(nombre string) (string, error) {
   firma := os.Getenv("FRASE")
   
   token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
@@ -257,20 +264,42 @@ func crearJWT(nombre string) {
 	return tokenString, nil
 }
 
-//CAMBIAR A ENVIARLE EL ARCHIVO AL USUARIO
-func crearArchivo(tipo string) (archivo *os.File, err error) {
-  // Obtener la fecha actual en formato YYYY-MM-DD
-	fechaActual := time.Now().Format("2006-01-02")
-	//Creamos un archivo de nombre movimiento_FECHAACTUAL
-  nombreArchivo := fmt.Sprintf("registros_%s.%s", fechaActual, tipo)
-  
-  // Crear el archivo nuevo si ni existe y si no existe lo actualiza.
-  archivo, err = os.OpenFile(nombreArchivo, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
-  if err != nil {
-    err = fmt.Errorf("Error al crear al erchivo, %v", err)
-    return
-  }
-  return
+func authMiddleware(siguiente http.Handler) http.Handler {
+  return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+    
+    autorizacion := r.Header.Get("Authorization")
+    if !strings.HasPrefix(autorizacion, "Bearer ") {
+      http.Error(w, "Falta el token o toke  errado.", http.StatusBadRequest)
+      return
+    }
+    
+    tokenString := strings.TrimPrefix(autorizacion, "Bearer ")
+    firma := os.Getenv("FRASE")
+    
+    token, err := jwt.Parse(tokenString, func(t *jwt.Token) (interface{}, error) {
+      
+      if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+        return nil, fmt.Errorf("Firma inesperada.")
+      }
+      
+      return []byte(firma), nil
+    })
+    
+    if err != nil || !token.Valid {
+      writeError(w, "Token invalido,", err, http.StatusBadRequest)
+      return
+    }
+    
+    claims, ok := token.Claims.(jwt.MapClaims)
+    if !ok {
+      http.Error(w, "Token invalido.", http.StatusBadRequest)
+      return
+    }
+    nombre := claims["nombreUsuario"].(string)
+    ctx := context.WithValue(r.Context(), "usuario", nombre)
+    
+    siguiente.ServeHTTP(w, r.WithContext(ctx))
+  })
 }
 
 //writeError se encarga de escribir en el responseWriter el error dado.

@@ -22,9 +22,10 @@ var db *sql.DB
 //getEgresos consulta los egresos en la tabla, que sean egresos y luego
 //los envia en formato json al navegador.
 func getEgresos(w http.ResponseWriter, r *http.Request) {
+  nombreUsuario := r.Context().Value("usuario").(string)
+  
   //consultamos en la tabla los egresos
-  //CAMBIAR USUARIO CUANDO SE HAGA EL LOGIN
-  registros, err := getRegistros("egreso", "carlos")
+  registros, err := getRegistros("egreso", nombreUsuario)
   if err != nil {
     writeError(w, "Error en al consultar los registros", err, http.StatusInternalServerError)
     return
@@ -40,8 +41,10 @@ func getEgresos(w http.ResponseWriter, r *http.Request) {
 
 //getIngresos consulta en la base de datos y retorna los ingresos ssegun el usuario.
 func getIngresos(w http.ResponseWriter, r *http.Request) {
+  nombreUsuario := r.Context().Value("usuario").(string)
+  
   //consultamos los movimientos tipo ingreso, validamos el error.
-  registros, err := getRegistros("ingreso", "carlos")
+  registros, err := getRegistros("ingreso", nombreUsuario)
   if err != nil {
     writeError(w, "Error en al consultar los registros", err, http.StatusInternalServerError)
     return
@@ -63,6 +66,8 @@ func getIngresos(w http.ResponseWriter, r *http.Request) {
 //que se le pasen, sumara todo entre ellas y devolvera solo la suma
 //Ejm consulta http://100.69.187.16:8080/totalEgresos?desde=2024-12-20T00:00:00Z&hasta=2024-12-31T00:00:00Z
 func getTotalEgresos(w http.ResponseWriter, r *http.Request) {
+  nombreUsuario := r.Context().Value("usuario").(string)
+  
   //Recibe las fechas y en el formato para time.Time y validamos el error.
   desde, err := time.Parse("2006-01-02T00:00:00Z", r.URL.Query().Get("desde"))
   if err != nil {
@@ -78,7 +83,7 @@ func getTotalEgresos(w http.ResponseWriter, r *http.Request) {
   }
   
   //consultamos en la tabla egresos con fecha de inicio y fin.
-  total, err := getTotal("egreso", desde, hasta, "carlos")
+  total, err := getTotal("egreso", desde, hasta, nombreUsuario)
   if err != nil {
     writeError(w, "Error en al consultar los registros", err, http.StatusInternalServerError)
     return
@@ -96,6 +101,8 @@ func getTotalEgresos(w http.ResponseWriter, r *http.Request) {
 //consulta http://100.69.187.16:8080/totalIngresos?desde=2024-12-04T00:00:00Z&hasta=2024-12-20T00:00:00Z
 func getTotalIngresos(w http.ResponseWriter, r *http.Request) {
   
+  nombreUsuario := r.Context().Value("usuario").(string)
+  
   //Convertimos los strings a formato fecha y validamos los errores
   desde, err := time.Parse("2006-01-02T00:00:00Z", r.URL.Query().Get("desde"))
   if err != nil {
@@ -111,7 +118,7 @@ func getTotalIngresos(w http.ResponseWriter, r *http.Request) {
   }
   
   //consultamos en la tabla solos los ingresos entre las fechas.
-  total, err := getTotal("ingreso", desde, hasta, "carlos")
+  total, err := getTotal("ingreso", desde, hasta, nombreUsuario)
   if err != nil {
     writeError(w, "Error en al consultar los registros", err, http.StatusInternalServerError)
     return
@@ -127,6 +134,8 @@ func getTotalIngresos(w http.ResponseWriter, r *http.Request) {
 //getById retorna un moviviento dependiendo del id y usuario que se pasa como
 //variqble en la URL. ejm: http://100.69.187.16:8080/movimiento/10
 func getById(w http.ResponseWriter, r *http.Request) {
+  nombreUsuario := r.Context().Value("usuario").(string)
+  
   //Sacamos la variable.
   //validamos que sea de tipo int
   id, err := strconv.Atoi(mux.Vars(r)["id"])
@@ -136,7 +145,7 @@ func getById(w http.ResponseWriter, r *http.Request) {
   }
   
   //consultamos la tabla con id y usuario.
-  m, err := getRegistroById(id, "carlos")
+  m, err := getRegistroById(id, nombreUsuario)
   if err != nil {
     writeError(w, "Error en al consultar el registro", err, http.StatusInternalServerError)
     return
@@ -151,6 +160,8 @@ func getById(w http.ResponseWriter, r *http.Request) {
 //dado solo los regustris que esten dentro del rango de fechas que se le pase.
 //ejm http://10.151.44.98:8080/exportRango?desde=2024-12-04T00:00:00Z&hasta=2024-12-20T00:00:00Z&tipo=json
 func exportFechas(w http.ResponseWriter, r *http.Request) {
+  nombreUsuario := r.Context().Value("usuario").(string)
+  
   //Recibe las fechas y en el formato para time.Time y validamos el error.
   desde, err := time.Parse("2006-01-02T00:00:00Z", r.URL.Query().Get("desde"))
   if err != nil {
@@ -172,7 +183,7 @@ func exportFechas(w http.ResponseWriter, r *http.Request) {
   }
   
   //Consultamos la base de datis, validamos el error.
-  registros, err := getRegistrosFechas(desde, hasta, "carlos")
+  registros, err := getRegistrosFechas(desde, hasta, nombreUsuario)
   if err != nil {
     writeError(w, "Error al consultar los regustris en la base de datos.", err, http.StatusInternalServerError)
     return
@@ -225,8 +236,10 @@ func exportFechas(w http.ResponseWriter, r *http.Request) {
 //POSTS
 
 //postEgreso agrega un moviviento en la tabla de tipo egreso, se resive con un Json.
-//Json ejemplo{"monto": 22,"fecha": "2024-12-05T00:00:00Z", "usuario": "carlos"}
+//Json ejemplo{"monto": 22,"fecha": "2024-12-05T00:00:00Z"}
 func postEgreso(w http.ResponseWriter, r *http.Request) {
+  nombreUsuario := r.Context().Value("usuario").(string)
+  
   //Creo la variable para almacenar los datos que envia el cliente
   var m Registro
   //Decodifico el dato de un json a la variable creada al mismo tiempo que evaluo el error
@@ -246,7 +259,7 @@ func postEgreso(w http.ResponseWriter, r *http.Request) {
   m.Tipo = "egreso"
   
   //Insertamos los datos en la tabla movimienos de la base de datos
-  _, err = db.Exec("INSERT INTO registros ( tipo, monto, descripcion, grupo, fecha, usuario ) VALUES(?, ?, ?, ?, ?, ?)", m.Tipo, m.Monto, m.Descripcion, m.Grupo, m.Fecha, m.Usuario)
+  _, err = db.Exec("INSERT INTO registros ( tipo, monto, descripcion, grupo, fecha, usuario ) VALUES(?, ?, ?, ?, ?, ?)", m.Tipo, m.Monto, m.Descripcion, m.Grupo, m.Fecha, nombreUsuario)
   //Valido el error al insertar los datos
   if err != nil {
     http.Error(w, "Error al insertar egreso en la tabla.", http.StatusInternalServerError)
@@ -267,6 +280,8 @@ func postEgreso(w http.ResponseWriter, r *http.Request) {
 
 //postIngreso agrega a la base de datos un movimiento con el tipo ingreso
 func postIngreso(w http.ResponseWriter, r *http.Request) {
+  nombreUsuario := r.Context().Value("usuario").(string)
+  
   var m Registro
   //leemos los datos json y los pasamos a las estructura
   //comprobamos el error
@@ -287,7 +302,7 @@ func postIngreso(w http.ResponseWriter, r *http.Request) {
   m.Tipo = "ingreso"
   
   //Insertamos los datos en la tabla movimienos de la base de datos
-  _, err = db.Exec("INSERT INTO registros ( tipo, monto, descripcion, grupo, fecha, usuario ) VALUES(?, ?, ?, ?, ?, ?)", m.Tipo, m.Monto, m.Descripcion, m.Grupo, m.Fecha, m.Usuario)
+  _, err = db.Exec("INSERT INTO registros ( tipo, monto, descripcion, grupo, fecha, usuario ) VALUES(?, ?, ?, ?, ?, ?)", m.Tipo, m.Monto, m.Descripcion, m.Grupo, m.Fecha, nombreUsuario)
   //Valido el error al insertar los datos
   if err != nil {
     http.Error(w, "Error al insertar ingreso en la tabla.", http.StatusInternalServerError)
@@ -306,7 +321,7 @@ func postIngreso(w http.ResponseWriter, r *http.Request) {
 }
 
 func registrar(w http.ResponseWriter, r *http.Request) {
-  var u usuario
+  var u Usuario
   err := json.NewDecoder(r.Body).Decode(&u)
   if err != nil {
     writeError(w, "Error al obtener los datos del body", err, http.StatusBadRequest)
@@ -322,7 +337,7 @@ func registrar(w http.ResponseWriter, r *http.Request) {
 }
 
 func login(w http.ResponseWriter, r *http.Request) {
-  var u usuario
+  var u Usuario
   err := json.NewDecoder(r.Body).Decode(&u)
   if err != nil {
     writeError(w, "Error al obtener los datos del body", err, http.StatusBadRequest)
@@ -331,6 +346,7 @@ func login(w http.ResponseWriter, r *http.Request) {
   err = comprobarUsuario(u)
   if err != nil {
     writeError(w, "Error el usuario o contraseña incorecto.", err, http.StatusInternalServerError)
+    return
   }
   
   tokenString, err := crearJWT(u.Nombre)
@@ -355,6 +371,8 @@ func login(w http.ResponseWriter, r *http.Request) {
 // {"monto": 333, "grupo": "nuevo", "usuario": "carlos"}
 //ToDo: LOS DATOS OMITIDOS DEJARLOS CON EL MISMO VALOR.
 func putById(w http.ResponseWriter, r *http.Request) {
+  nombreUsuario := r.Context().Value("usuario").(string)
+  
   //Extraemos la el id de la URL y aseguramos que sea un int.
   id, err := strconv.Atoi(mux.Vars(r)["id"])
   if err != nil {
@@ -374,7 +392,7 @@ func putById(w http.ResponseWriter, r *http.Request) {
   }
   
   //Actualizamos los datos en la tabla por id y validamos el error.
-  _, err = db.Exec("UPDATE registros SET monto = ?, descripcion = ?, grupo = ?, fecha = ? WHERE id = ? AND usuario = ?", m.Monto, m.Descripcion, m.Grupo, m.Fecha, id, "carlos")
+  _, err = db.Exec("UPDATE registros SET monto = ?, descripcion = ?, grupo = ?, fecha = ? WHERE id = ? AND usuario = ?", m.Monto, m.Descripcion, m.Grupo, m.Fecha, id, nombreUsuario)
   if err != nil {
     errorStr := fmt.Sprintf("Error al actualizar el registro en la base de datos con el id ingresado. %v", err)
     http.Error(w, errorStr, http.StatusInternalServerError)
@@ -390,6 +408,8 @@ func putById(w http.ResponseWriter, r *http.Request) {
 
 //deleteById elimina un registro segun el id ingresado.
 func deleteById(w http.ResponseWriter, r *http.Request) {
+  nombreUsuario := r.Context().Value("usuario").(string)
+  
   //Extraemos la el id de la URL y aseguramos que sea un int.
   id, err := strconv.Atoi(mux.Vars(r)["id"])
   if err != nil {
@@ -407,7 +427,7 @@ func deleteById(w http.ResponseWriter, r *http.Request) {
   defer stmt.Close()
   
   //Ejecutamos la instruccion para eliminar el regustri.
-  res, err := stmt.Exec(id, "carlos")
+  res, err := stmt.Exec(id, nombreUsuario)
   if err != nil {
     http.Error(w, "Error ejecutando DELETE", http.StatusInternalServerError)
     return
@@ -436,29 +456,29 @@ func main() {
   defer db.Close()
   r := mux.NewRouter()
   
-  r.HandleFunc("/egreso", getEgresos).Methods("GET")
-  r.HandleFunc("/ingreso", getIngresos).Methods("GET")
-  r.HandleFunc("/totalEgresos", getTotalEgresos).Methods("GET")
-  r.HandleFunc("/totalIngresos", getTotalIngresos).Methods("GET")
-  r.HandleFunc("/movimiento/{id}", getById).Methods("GET")
-  r.HandleFunc("/exportRango", exportFechas).Methods("GET")
-  r.HandleFunc("/ingreso", postIngreso).Methods("POST")
-  r.HandleFunc("/egreso", postEgreso).Methods("POST")
+  r.Handle("/egreso", authMiddleware(http.HandlerFunc(getEgresos))).Methods("GET")
+  r.Handle("/ingreso", authMiddleware(http.HandlerFunc(getIngresos))).Methods("GET")
+  r.Handle("/totalEgresos", authMiddleware(http.HandlerFunc(getTotalEgresos))).Methods("GET")
+  r.Handle("/totalIngresos", authMiddleware(http.HandlerFunc(getTotalIngresos))).Methods("GET")
+  r.Handle("/movimiento/{id}", authMiddleware(http.HandlerFunc(getById))).Methods("GET")
+  r.Handle("/exportRango", authMiddleware(http.HandlerFunc(exportFechas))).Methods("GET")
+  r.Handle("/ingreso", authMiddleware(http.HandlerFunc(postIngreso))).Methods("POST")
+  r.Handle("/egreso", authMiddleware(http.HandlerFunc(postEgreso))).Methods("POST")
   r.HandleFunc("/registrar", registrar).Methods("POST")
   r.HandleFunc("/login", login).Methods("POST")
-  r.HandleFunc("/movimiento/{id}", putById).Methods("PUT")
-  r.HandleFunc("/movimiento/{id}", deleteById).Methods("DELETE")
+  r.Handle("/movimiento/{id}", authMiddleware(http.HandlerFunc(putById))).Methods("PUT")
+  r.Handle("/movimiento/{id}", authMiddleware(http.HandlerFunc(deleteById))).Methods("DELETE")
   
   
   
   server := http.Server{
-    Addr: "100.68.49.243:8080",
+    Addr: "10.254.97.246:8080",
     Handler: r,
     WriteTimeout: 10 * time.Second,
     ReadTimeout: 10 * time.Second,
     MaxHeaderBytes: 1 << 20,
   }
   
-  log.Println("Listening in http://100.68.49.243:8080...")
+  log.Println("Listening in http://10.254.97.246:8080...")
   log.Fatal(server.ListenAndServe())
 }
