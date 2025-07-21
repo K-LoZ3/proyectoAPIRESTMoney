@@ -224,13 +224,16 @@ func getRegistroById(id int, usuario string) (Registro, error) {
 
 //guardarUsuario guarda un usuario y su clave hasheada.
 func guardarUsuario(u Usuario) error {
+  //convertimos la clave a un has para y comprobamos el error.
   hash, err := bcrypt.GenerateFromPassword([]byte(u.Clave), bcrypt.DefaultCost)
   if err != nil {
     return err
   }
   
+  //convertimos el hash a string para almacenarla en la base de datos.
   u.Clave = string(hash)
   
+  //almacenamos el nombre de usuario y el hash de la clave
   _, err = db.Exec("INSERT INTO usuarios( nombre, clave ) VALUES( ?, ? )", u.Nombre, u.Clave)
   if err != nil {
     return err
@@ -238,24 +241,35 @@ func guardarUsuario(u Usuario) error {
   return nil
 }
 
+//comprobar usuario se encarga de validar que la clave coincida con la que
+//esta almacenada en la base de datos para ese usuario.
 func comprobarUsuario(u Usuario) error {
   var hashUser string
+  //consultamos el usuario y escaneamos el hash de la clave almacenada.
   err := db.QueryRow("SELECT clave FROM usuarios WHERE nombre = ?", u.Nombre).Scan(&hashUser)
   if err != nil {
     return err
   }
   
+  //si no hay error al escanear retornamos el error que surja al comparar
+  //las claves, teniendo en cuenta que se comparan los hash. Si no son iguales
+  //retorna un error de lo contrario retorna nil
   return bcrypt.CompareHashAndPassword([]byte(hashUser), []byte(u.Clave))
 }
 
+//crearJWT devuelve un jwt firmado con la variable de entorno y el
+//nombre de usuario con 2 hora de vencimiento
 func crearJWT(nombre string) (string, error) {
+  //buscamos en .env la frase para firmar el jwt
   firma := os.Getenv("FRASE")
   
+  //preparamos los datos para el jwt: el nombre de usuario y el tiempo maximo.
   token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"nombreUsuario": nombre,
 		"exp": time.Now().Add(2 * time.Hour).Unix(),
 	})
-
+	
+	//firmamos e token.
 	tokenString, err := token.SignedString([]byte(firma))
 	if err != nil {
 		return "", err
@@ -264,40 +278,61 @@ func crearJWT(nombre string) (string, error) {
 	return tokenString, nil
 }
 
+//authMiddleware sera el middleware que validara si un token es correcto
+//y ademas se encargara de pasar por contexto el nombre de usuario a la
+//siguiente handlerFunc.
 func authMiddleware(siguiente http.Handler) http.Handler {
+  //retornamos el handler que tiene la logica de validar el toke  y ademas
+  //ejecuta la HandlerFunc al final para continuar con la logica del api
   return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
     
+    //obtenemos del header la autorizacio.
     autorizacion := r.Header.Get("Authorization")
+    //verificamls que tenga Bearer al inicio.
     if !strings.HasPrefix(autorizacion, "Bearer ") {
       http.Error(w, "Falta el token o toke  errado.", http.StatusBadRequest)
       return
     }
     
+    //quitamos el Bearer y dejamos solo el token.
     tokenString := strings.TrimPrefix(autorizacion, "Bearer ")
+    //buscamls la frase secreta con la que firmamos el token
     firma := os.Getenv("FRASE")
     
+    //la funcion .parce recibe una funcio  que retorna lo necesario para validar.
     token, err := jwt.Parse(tokenString, func(t *jwt.Token) (interface{}, error) {
       
+      //validamos que si este firmada con el mismo metodo.
       if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
         return nil, fmt.Errorf("Firma inesperada.")
       }
       
+      //retornamos la palabra clave para que se valide la firma.
       return []byte(firma), nil
     })
     
+    //si hay error o no es valido el tokeb. no continuamos
     if err != nil || !token.Valid {
       writeError(w, "Token invalido,", err, http.StatusBadRequest)
       return
     }
     
+    //convertimos el token a un map claims para extraer los datos que
+    //incluimos en el antes de firmarlo.
     claims, ok := token.Claims.(jwt.MapClaims)
     if !ok {
       http.Error(w, "Token invalido.", http.StatusBadRequest)
       return
     }
+    
+    //extraemos el nombre de usuario y lo casteamos a string
     nombre := claims["nombreUsuario"].(string)
+    
+    //Lo convertimos a contexto para pasarlo a al siguiente HandlerFunc
     ctx := context.WithValue(r.Context(), "usuario", nombre)
     
+    //llamamos al la funcuon que se encargara de llamar al handlerFunc solo
+    //que esta le pasara el contexto con el nombre de usuario
     siguiente.ServeHTTP(w, r.WithContext(ctx))
   })
 }

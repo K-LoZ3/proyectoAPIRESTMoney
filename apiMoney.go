@@ -22,6 +22,7 @@ var db *sql.DB
 //getEgresos consulta los egresos en la tabla, que sean egresos y luego
 //los envia en formato json al navegador.
 func getEgresos(w http.ResponseWriter, r *http.Request) {
+  //obtenemos el usuario del contexto que es pasado del middleware.
   nombreUsuario := r.Context().Value("usuario").(string)
   
   //consultamos en la tabla los egresos
@@ -320,13 +321,17 @@ func postIngreso(w http.ResponseWriter, r *http.Request) {
   }
 }
 
+//registro se encarga de guardar un usuario su clave hasheada en la db
 func registrar(w http.ResponseWriter, r *http.Request) {
   var u Usuario
+  
+  //obtenemos los datos a registrar
   err := json.NewDecoder(r.Body).Decode(&u)
   if err != nil {
     writeError(w, "Error al obtener los datos del body", err, http.StatusBadRequest)
   }
   
+  //guardamos el usuario y su clave en la base de datos
   err = guardarUsuario(u)
   if err != nil {
     writeError(w, "Error al guardar el usuario y clave.", err, http.StatusInternalServerError)
@@ -336,19 +341,25 @@ func registrar(w http.ResponseWriter, r *http.Request) {
   
 }
 
+//login se encarga de validar la clave es correcta segun la registrada para
+//ese usuario.
 func login(w http.ResponseWriter, r *http.Request) {
   var u Usuario
+  
+  //obtenemos los datis a comparar
   err := json.NewDecoder(r.Body).Decode(&u)
   if err != nil {
     writeError(w, "Error al obtener los datos del body", err, http.StatusBadRequest)
   }
   
+  //comparamos valores con los de la base de datos
   err = comprobarUsuario(u)
   if err != nil {
     writeError(w, "Error el usuario o contraseña incorecto.", err, http.StatusInternalServerError)
     return
   }
   
+  //creamos un jwt para el usuario. Co  este podra usar lasdiferentes rutas de la api.
   tokenString, err := crearJWT(u.Nombre)
   if err != nil {
     writeError(w, "Error al crear el jwt.", err, http.StatusInternalServerError)
@@ -456,6 +467,9 @@ func main() {
   defer db.Close()
   r := mux.NewRouter()
   
+  r.HandleFunc("/registrar", registrar).Methods("POST")
+  r.HandleFunc("/login", login).Methods("POST")
+  
   r.Handle("/egreso", authMiddleware(http.HandlerFunc(getEgresos))).Methods("GET")
   r.Handle("/ingreso", authMiddleware(http.HandlerFunc(getIngresos))).Methods("GET")
   r.Handle("/totalEgresos", authMiddleware(http.HandlerFunc(getTotalEgresos))).Methods("GET")
@@ -464,8 +478,6 @@ func main() {
   r.Handle("/exportRango", authMiddleware(http.HandlerFunc(exportFechas))).Methods("GET")
   r.Handle("/ingreso", authMiddleware(http.HandlerFunc(postIngreso))).Methods("POST")
   r.Handle("/egreso", authMiddleware(http.HandlerFunc(postEgreso))).Methods("POST")
-  r.HandleFunc("/registrar", registrar).Methods("POST")
-  r.HandleFunc("/login", login).Methods("POST")
   r.Handle("/movimiento/{id}", authMiddleware(http.HandlerFunc(putById))).Methods("PUT")
   r.Handle("/movimiento/{id}", authMiddleware(http.HandlerFunc(deleteById))).Methods("DELETE")
   
