@@ -363,11 +363,11 @@ func login(w http.ResponseWriter, r *http.Request) {
   }
     
   //validamos el usuario y la contraseña.
-  if !validarStringUsuario(u) {
+  if !validarStringUsuario(u.Nombre) {
     http.Error(w, "Error, formato de usuario errado.", http.StatusBadRequest)
     return
   }
-  if !validarStringPassword(u) {
+  if !validarStringPassword(u.Clave) {
     http.Error(w, "Error, formato de usuario errado.", http.StatusBadRequest)
     return
   }

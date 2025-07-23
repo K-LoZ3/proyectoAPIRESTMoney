@@ -96,7 +96,7 @@ func comprobarInfoRequest(m Registro) error{
 }
 
 //validarStringUsuario comprueba que el nombre de usuario tengan un formato expecifico.
-func validarUserPass(s string) bool {
+func validarStringUsuario(s string) bool {
   //Caracteres que se pueden usar [A-Za-z\d_]
   //Longitud minima 4 y maxima 9 {4,9}
   regPass := regexp.MustCompile(`^[A-Za-z\d_]{4,9}$`)
@@ -356,6 +356,12 @@ func authMiddleware(siguiente http.Handler) http.Handler {
     claims, ok := token.Claims.(jwt.MapClaims)
     if !ok {
       http.Error(w, "Token invalido.", http.StatusBadRequest)
+      return
+    }
+    
+    exp := claims["exp"].(float64)
+    if time.Now().Unix() > int64(exp) {
+      http.Error(w, "Error, token exporado.", http.StatusBadRequest)
       return
     }
     
