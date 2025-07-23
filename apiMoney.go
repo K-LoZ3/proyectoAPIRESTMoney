@@ -331,6 +331,16 @@ func registrar(w http.ResponseWriter, r *http.Request) {
     writeError(w, "Error al obtener los datos del body", err, http.StatusBadRequest)
   }
   
+  //validamos el usuario y la contraseña antes de guardarla.
+  if !validarStringUsuario(u.Nombre) {
+    http.Error(w, "Error, formato de usuario errado.", http.StatusBadRequest)
+    return
+  }
+  if !validarStringPassword(u.Clave) {
+    http.Error(w, "Error, formato de clave errado.", http.StatusBadRequest)
+    return
+  }
+  
   //guardamos el usuario y su clave en la base de datos
   err = guardarUsuario(u)
   if err != nil {
@@ -351,7 +361,17 @@ func login(w http.ResponseWriter, r *http.Request) {
   if err != nil {
     writeError(w, "Error al obtener los datos del body", err, http.StatusBadRequest)
   }
-  
+    
+  //validamos el usuario y la contraseña.
+  if !validarStringUsuario(u) {
+    http.Error(w, "Error, formato de usuario errado.", http.StatusBadRequest)
+    return
+  }
+  if !validarStringPassword(u) {
+    http.Error(w, "Error, formato de usuario errado.", http.StatusBadRequest)
+    return
+  }
+
   //comparamos valores con los de la base de datos
   err = comprobarUsuario(u)
   if err != nil {
